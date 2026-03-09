@@ -1,30 +1,9 @@
-// package com.gp.GP_backend;
-
-// import org.springframework.boot.SpringApplication;
-// import org.springframework.boot.autoconfigure.SpringBootApplication;
-
-// @SpringBootApplication
-// public class GpBackendApplication {
-
-// 	public static void main(String[] args) {
-// 		SpringApplication.run(GpBackendApplication.class, args);
-// 	}
-
-// }
 package com.gp.GP_backend;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration;
-import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
-import org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration;
 
-// This tells Spring Boot to completely ignore database setup on startup
-@SpringBootApplication(exclude = {
-		DataSourceAutoConfiguration.class,
-		DataSourceTransactionManagerAutoConfiguration.class,
-		HibernateJpaAutoConfiguration.class
-})
+@SpringBootApplication
 public class GpBackendApplication {
 
 	public static void main(String[] args) {
@@ -32,3 +11,25 @@ public class GpBackendApplication {
 	}
 
 }
+
+// package com.gp.GP_backend;
+
+// import org.springframework.boot.SpringApplication;
+// import org.springframework.boot.autoconfigure.SpringBootApplication;
+// import org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration;
+// import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
+// import org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration;
+
+// // This tells Spring Boot to completely ignore database setup on startup
+// @SpringBootApplication(exclude = {
+// 		DataSourceAutoConfiguration.class,
+// 		DataSourceTransactionManagerAutoConfiguration.class,
+// 		HibernateJpaAutoConfiguration.class
+// })
+// public class GpBackendApplication {
+
+// 	public static void main(String[] args) {
+// 		SpringApplication.run(GpBackendApplication.class, args);
+// 	}
+
+// }
