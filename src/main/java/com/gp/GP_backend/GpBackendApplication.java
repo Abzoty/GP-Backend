@@ -2,8 +2,10 @@ package com.gp.GP_backend;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableAsync;
 
 @SpringBootApplication
+@EnableAsync
 public class GpBackendApplication {
 
 	public static void main(String[] args) {
