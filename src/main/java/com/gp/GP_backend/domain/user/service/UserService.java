@@ -1,42 +1,50 @@
 package com.gp.GP_backend.domain.user.service;
 
-import com.gp.GP_backend.shared.util.EmailService;
 import org.modelmapper.ModelMapper;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import com.gp.GP_backend.domain.user.repository.UserRepository;
-import com.fasterxml.jackson.annotation.JsonCreator.Mode;
-import  com.gp.GP_backend.domain.user.dto.*;
+import com.gp.GP_backend.domain.user.dto.RegisterRequest;
 import com.gp.GP_backend.domain.user.entity.User;
+import com.gp.GP_backend.domain.user.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class UserService {
 
-    @Autowired
-    private UserRepository userRepository;
-    @Autowired
-    private EmailService emailService;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final ModelMapper modelMapper;
 
-    @Autowired
-    private ModelMapper modelMapper;
-
-    public UserResponse getuserById(Long id) {
-        User user  =  userRepository.findById(id).orElse(null);
-
-        if (user == null) {
-            return null;
+    @Transactional
+    public User registerUser(RegisterRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new IllegalArgumentException("Email already in use");
         }
-        return modelMapper.map(user, UserResponse.class);
+        if (request.getStudentId() != null &&
+                userRepository.existsByStudentId(request.getStudentId())) {
+            throw new IllegalArgumentException("Student ID already registered");
+        }
 
+        User user = modelMapper.map(request, User.class);
+
+        user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+
+        // User user = User.builder()
+        //         .fullName(request.getFullName())
+        //         .email(request.getEmail())
+        //         .passwordHash(passwordEncoder.encode(request.getPassword()))
+        //         .studentId(request.getStudentId())
+        //         .academicYear(request.getAcademicYear())
+        //         .currentSemester(request.getCurrentSemester())
+        //         .build();
+
+        return userRepository.save(user);
     }
 
-    public UserResponse signup(UserResponse entity) {
-        User user = modelMapper.map(entity, User.class);
-        User savedUser = userRepository.save(user);
-
-        emailService.sendWelecomeEmail(user.getEmail());
-
-        return modelMapper.map(savedUser, UserResponse.class);
-
+    public User getUserById(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
     }
 }

@@ -1,26 +1,25 @@
 package com.gp.GP_backend.domain.user.dto;
 
 import jakarta.validation.constraints.*;
-import lombok.*;
+import lombok.Data;
 
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+@Data
 public class RegisterRequest {
 
     @NotBlank
-    @Email
-    private String email;
-
-    @NotBlank
-    @Size(min = 8, message = "Password must be at least 8 characters")
-    private String password;
-
-    @NotBlank
-    @Size(max = 150)
     private String fullName;
 
+    @NotBlank @Email
+    private String email;
+
+    @NotBlank @Size(min = 8, message = "Password must be at least 8 characters")
+    private String password;
+
     private String studentId;
-    private Short academicYear;
-    private Short currentSemester;
-    private String department;
+
+    @Min(1) @Max(5)
+    private Integer academicYear;
+
+    @Min(1) @Max(10)
+    private Integer currentSemester;
 }

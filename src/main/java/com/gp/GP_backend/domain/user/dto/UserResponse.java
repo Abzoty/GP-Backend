@@ -1,13 +1,10 @@
 package com.gp.GP_backend.domain.user.dto;
 
-import lombok.*;
-
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
-@Builder
+import lombok.Data;
+
+@Data
 public class UserResponse {
     private Long id;
     private String email;
@@ -19,6 +16,4 @@ public class UserResponse {
     private String department;
     private String imageUrl;
     private String bio;
-    private Boolean isActive;
-    private LocalDateTime createdAt;
 }
