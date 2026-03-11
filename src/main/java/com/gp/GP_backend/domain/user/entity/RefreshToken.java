@@ -39,8 +39,23 @@ public class RefreshToken {
     @Column(nullable = false, unique = true)
     private String token;
 
-    /** The user this token belongs to. */
-    @ManyToOne(fetch = FetchType.LAZY)
+    /**
+     * The user this token belongs to.
+     *
+     * <p>
+     * <b>Why EAGER:</b> Every operation on a refresh token (rotate, revoke,
+     * validate)
+     * immediately needs the associated user — to generate a new JWT, to verify
+     * ownership,
+     * or to check credentials. Using LAZY here causes a
+     * {@code LazyInitializationException}
+     * when the service method's {@code @Transactional} boundary closes before the
+     * controller
+     * accesses {@code token.getUser()}. EAGER avoids an extra query in practice
+     * because
+     * {@code findByToken()} always retrieves the user in the same join anyway.
+     */
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 

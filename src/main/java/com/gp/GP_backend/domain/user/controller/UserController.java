@@ -32,7 +32,6 @@ public class UserController {
     private final UserService userService;
     private final RefreshTokenService refreshTokenService;
     private final ModelMapper modelMapper;
-    private final RefreshTokenService refreshTokenService;
 
     /** Returns the profile of the currently authenticated user. */
     @GetMapping("/profile")

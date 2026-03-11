@@ -27,6 +27,21 @@ import java.util.UUID;
  * family</em> and reject
  * the request — this indicates a stolen token is being replayed.</li>
  * </ol>
+ *
+ * <p>
+ * <b>Transaction design — why {@link TokenFamilyRevoker} is a separate
+ * bean:</b>
+ * Spring {@code @Transactional} works through proxies. When a method calls
+ * another method
+ * on <em>the same object</em> ({@code this.someMethod()}), it bypasses the
+ * proxy entirely,
+ * meaning {@code @Transactional} annotations on the called method are silently
+ * ignored.
+ * To guarantee the family revocation commits independently (before the 401
+ * exception
+ * triggers a rollback of this method's transaction), the revocation lives in
+ * {@link TokenFamilyRevoker} — a separate bean with its own proxy and
+ * {@code Propagation.REQUIRES_NEW}.
  */
 @Service
 @RequiredArgsConstructor
@@ -36,6 +51,12 @@ public class RefreshTokenService {
     private long refreshExpirationMs;
 
     private final RefreshTokenRepository refreshTokenRepository;
+
+    /**
+     * Injected as a separate bean so that its {@code REQUIRES_NEW} transaction
+     * propagation is honoured by Spring's proxy. See class-level Javadoc.
+     */
+    private final TokenFamilyRevoker tokenFamilyRevoker;
 
     /**
      * Issues a brand-new refresh token for a user after login.
@@ -66,6 +87,14 @@ public class RefreshTokenService {
      * new one
      * within the same family.
      *
+     * <p>
+     * If the token is already revoked (reuse detected), delegates to
+     * {@link TokenFamilyRevoker#revokeFamily(String)}, which runs in its own
+     * independent transaction and commits immediately before this method throws
+     * 401.
+     * This guarantees the entire family is locked in the DB even though this
+     * method's own transaction will be rolled back by the exception.
+     *
      * @throws ApiException 401 if the token is unknown, already used, or expired.
      */
     @Transactional
@@ -73,10 +102,12 @@ public class RefreshTokenService {
         RefreshToken oldToken = refreshTokenRepository.findByToken(oldTokenValue)
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Invalid refresh token"));
 
-        // Reuse detected — the token was already consumed. Possible token theft.
+        // Reuse detected — a token that was already consumed is being presented again.
+        // This likely means a stolen token is being replayed by an attacker.
         if (oldToken.isRevoked()) {
-            // Revoke the entire family to invalidate all active sessions from this login
-            refreshTokenRepository.revokeAllByFamilyId(oldToken.getFamilyId());
+            // Calls through TokenFamilyRevoker's proxy → REQUIRES_NEW transaction
+            // commits independently → not rolled back when we throw below.
+            tokenFamilyRevoker.revokeFamily(oldToken.getFamilyId());
             throw new ApiException(HttpStatus.UNAUTHORIZED,
                     "Refresh token reuse detected. All sessions have been invalidated. Please log in again.");
         }
