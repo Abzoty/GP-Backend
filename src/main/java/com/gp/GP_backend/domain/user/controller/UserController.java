@@ -1,5 +1,6 @@
 package com.gp.GP_backend.domain.user.controller;
 
+import com.gp.GP_backend.domain.user.dto.RefreshRequest;
 // import com.gp.GP_backend.domain.user.dto.RefreshRequest;
 import com.gp.GP_backend.domain.user.dto.UserResponse;
 import com.gp.GP_backend.domain.user.entity.User;
@@ -7,6 +8,7 @@ import com.gp.GP_backend.domain.user.service.RefreshTokenService;
 import com.gp.GP_backend.domain.user.service.UserService;
 import com.gp.GP_backend.shared.response.ApiResponse;
 
+import jakarta.validation.Valid;
 // import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
@@ -37,9 +39,10 @@ public class UserController {
 
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(
-            @AuthenticationPrincipal User currentUser) {
+            @AuthenticationPrincipal User currentUser,
+            @Valid @RequestBody RefreshRequest request) {
 
-        refreshTokenService.revokeAllUserTokens(currentUser);
+        refreshTokenService.revokeTokenForUser(request.getRefreshToken(), currentUser);
         return ResponseEntity.ok(ApiResponse.ok("Logged out successfully", null));
     }
 }
