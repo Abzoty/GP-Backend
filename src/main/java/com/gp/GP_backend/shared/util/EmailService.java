@@ -1,21 +1,35 @@
 package com.gp.GP_backend.shared.util;
 
-// import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
-public class EmailService
-{
-    private final JavaMailSender mailSender = null;
+@RequiredArgsConstructor
+@Slf4j
+public class EmailService {
+
+    private final JavaMailSender mailSender;
+
     @Async
-    public void sendWelecomeEmail(String email) {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(email);
-        message.setSubject("Welcome to GP Backend");
-        message.setText("Welcome to GP Backend!");
-        mailSender.send(message);
+    public void sendWelcomeEmail(String toEmail, String fullName) {
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(toEmail);
+            message.setSubject("Welcome to Covalent 🎉");
+            message.setText(
+                "Hi " + fullName + ",\n\n" +
+                "Welcome to Covalent! Your account has been created successfully.\n\n" +
+                "Start exploring spaces, asking questions, and earning XP!\n\n" +
+                "— The Covalent Team"
+            );
+            mailSender.send(message);
+            log.info("Welcome email sent to {}", toEmail);
+        } catch (Exception e) {
+            log.error("Failed to send welcome email to {}: {}", toEmail, e.getMessage());
+        }
     }
 }

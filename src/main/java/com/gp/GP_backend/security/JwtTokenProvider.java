@@ -39,6 +39,10 @@ public class JwtTokenProvider {
         return parseClaims(token).getSubject();
     }
 
+    public long extractId(String token) {
+        return parseClaims(token).get("id", Long.class);
+    }
+
     public boolean validateToken(String token, UserDetails userDetails) {
         try {
             String email = extractEmail(token);

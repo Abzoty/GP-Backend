@@ -24,6 +24,12 @@ public class ModelMapperConfig {
         mapper.typeMap(RegisterRequest.class, User.class)
                 .addMappings(m -> m.skip(User::setPasswordHash));
 
+        // User → UserResponse
+        // Skip passwordHash field
+        // mapper.typeMap(User.class, UserResponse.class);
+
+                
+
         return mapper;
     }
 }

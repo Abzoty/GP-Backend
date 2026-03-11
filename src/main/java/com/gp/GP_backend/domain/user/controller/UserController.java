@@ -3,45 +3,30 @@ package com.gp.GP_backend.domain.user.controller;
 import com.gp.GP_backend.domain.user.dto.UserResponse;
 import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.domain.user.service.UserService;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.beans.factory.annotation.Autowired;
+
+import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-
-
-
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/users")
+@RequiredArgsConstructor
 public class UserController {
 
-    @Autowired
-    private UserService userService;
-    
-    @GetMapping("/{id}/profile/view")
-    public ResponseEntity<UserResponse> Viewprofile(@PathVariable Long id) {
+    private final UserService userService;
+    private final ModelMapper modelMapper;
 
-        User user = userService.getUserById(id);
+    @GetMapping("/profile/view")
+    public ResponseEntity<UserResponse> Viewprofile(@AuthenticationPrincipal UserDetails userDetails) {
 
-        if(user == null) {
-            return ResponseEntity.notFound().build();
-        }
+        String email = userDetails.getUsername();
 
-        UserResponse userResponse = new UserResponse();
-        userResponse.setId(user.getId());
-        userResponse.setEmail(user.getEmail());
-        userResponse.setFullName(user.getFullName());
-        userResponse.setStudentId(user.getStudentId());
-        userResponse.setAcademicYear(user.getAcademicYear());
-        userResponse.setCurrentSemester(user.getCurrentSemester());
-        userResponse.setGpa(user.getGpa());
-        userResponse.setDepartment(user.getDepartment());
-        userResponse.setImageUrl(user.getImageUrl());
-        userResponse.setBio(user.getBio());
+        User user = userService.getUserByEmail(email);
+        UserResponse userResponse = modelMapper.map(user, UserResponse.class);
 
         return ResponseEntity.ok(userResponse);
     }
-    
 }
