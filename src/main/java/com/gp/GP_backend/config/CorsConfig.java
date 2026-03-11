@@ -8,43 +8,50 @@ import org.springframework.web.filter.CorsFilter;
 
 import java.util.List;
 
+/**
+ * Configures Cross-Origin Resource Sharing (CORS) for the application.
+ *
+ * <p>
+ * This bean is picked up automatically by {@link SecurityConfig} via
+ * {@code .cors(Customizer.withDefaults())}, which looks for a
+ * {@link CorsFilter} bean.
+ *
+ * <h3>Allowed origins</h3>
+ * <ul>
+ * <li>{@code http://localhost:5173} — Vite dev server (frontend).</li>
+ * <li>{@code http://localhost:8080} — local backend itself (Swagger UI).</li>
+ * </ul>
+ *
+ * <p>
+ * For production, replace these origins with the actual deployed frontend URL
+ * (e.g. {@code https://covalent.example.com}) — NEVER use {@code *} with
+ * credentials.
+ */
 @Configuration
 public class CorsConfig {
+
     @Bean
     public CorsFilter corsFilter() {
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         CorsConfiguration config = new CorsConfiguration();
 
-        // 1. Allow both your Frontend (Vite) and your Backend (Swagger UI)
+        // Explicit list of trusted origins (wildcard not allowed when credentials =
+        // true)
         config.setAllowedOrigins(List.of(
-                "http://localhost:5173", // Frontend
-                "http://localhost:8080" // Swagger UI / Backend
+                "http://localhost:5173", // Vite frontend dev server
+                "http://localhost:8080" // Swagger UI (same host as backend)
         ));
 
-        // 2. Standard allowed methods
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
-        // 3. Allow all headers (necessary for JWT 'Authorization' header)
+        // Allow all request headers — required for the JWT Authorization header
         config.setAllowedHeaders(List.of("*"));
 
-        // 4. Allow credentials (cookies/auth headers)
+        // Must be true for the browser to include the Authorization header in
+        // cross-origin requests
         config.setAllowCredentials(true);
 
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return new CorsFilter(source);
     }
-
-    // @Bean
-    // public CorsFilter corsFilter() {
-    // CorsConfiguration config = new CorsConfiguration();
-    // config.setAllowedOrigins(List.of("http://localhost:5173"));
-    // config.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
-    // config.setAllowedHeaders(List.of("*"));
-    // config.setAllowCredentials(true);
-
-    // UrlBasedCorsConfigurationSource source = new
-    // UrlBasedCorsConfigurationSource();
-    // source.registerCorsConfiguration("/**", config);
-    // return new CorsFilter(source);
-    // }
 }
