@@ -5,30 +5,63 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
+/**
+ * Records a single vote cast by a user on a post or answer.
+ *
+ * <p>
+ * {@code targetType} + {@code targetId} form a polymorphic reference
+ * (similar to a "generic foreign key"). Since posts and answers can both
+ * receive
+ * votes, and both now have UUID primary keys, {@code targetId} is stored as
+ * {@code UNIQUEIDENTIFIER}.
+ *
+ * <p>
+ * A unique constraint on {@code (user_id, target_type, target_id)} should be
+ * enforced at the service layer to prevent duplicate votes by the same user.
+ *
+ * <p>
+ * Vote types:
+ * <ul>
+ * <li>{@code UPVOTE} – cast on an answer; increments its upvote_count.</li>
+ * <li>{@code GOOD_QUESTION} – cast on a post; increments its
+ * good_question_count.</li>
+ * </ul>
+ */
 @Entity
 @Table(name = "votes")
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
 public class Vote {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(columnDefinition = "UNIQUEIDENTIFIER", updatable = false, nullable = false)
+    private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    /** ANSWER / QUESTION */
+    /**
+     * Discriminator for {@code targetId}.
+     * Values: {@code ANSWER}, {@code QUESTION}.
+     */
     @Column(name = "target_type", nullable = false, length = 20)
     private String targetType;
 
-    @Column(name = "target_id", nullable = false)
-    private Long targetId;
+    /**
+     * UUID of the target entity (Answer.id or Post.id).
+     * Not a proper FK — enforced at the application layer.
+     */
+    @Column(name = "target_id", nullable = false, columnDefinition = "UNIQUEIDENTIFIER")
+    private UUID targetId;
 
-    /** UPVOTE / GOOD_QUESTION */
+    /** UPVOTE or GOOD_QUESTION — see class-level Javadoc. */
     @Column(name = "vote_type", nullable = false, length = 20)
     private String voteType;
 

@@ -2,22 +2,33 @@ package com.gp.GP_backend.domain.user.dto;
 
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
-import lombok.*;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+/**
+ * Payload for {@code PATCH /api/v1/users/profile}.
+ * All fields are optional — only non-null fields will be applied.
+ */
+@Data
 public class UpdateProfileRequest {
 
     @Size(max = 150)
     private String fullName;
 
-    private Short academicYear;
-    private Short currentSemester;
+    @Min(1)
+    @Max(5)
+    private Integer academicYear;
 
-    @DecimalMin("0.0") @DecimalMax("4.0")
+    @Min(1)
+    @Max(10)
+    private Integer currentSemester;
+
+    @DecimalMin("0.0")
+    @DecimalMax("4.0")
     private BigDecimal gpa;
 
     private String department;
@@ -26,6 +37,3 @@ public class UpdateProfileRequest {
     @Size(max = 500)
     private String bio;
 }
-// Note: add the missing import at the top:
-// import jakarta.validation.constraints.DecimalMax;
-// import jakarta.validation.constraints.DecimalMin;

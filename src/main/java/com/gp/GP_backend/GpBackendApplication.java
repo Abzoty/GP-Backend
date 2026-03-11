@@ -1,45 +1,34 @@
 package com.gp.GP_backend;
 
-// import org.modelmapper.ModelMapper;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-// import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+/**
+ * Entry point for the Covalent GP Backend application.
+ *
+ * <p>
+ * Key annotations:
+ * <ul>
+ * <li>{@code @EnableAsync} – allows {@code @Async} methods (e.g. email sending)
+ * to run
+ * on a background thread pool instead of the request thread.</li>
+ * <li>{@code @EnableScheduling} – activates {@code @Scheduled} tasks (e.g.
+ * nightly token cleanup).</li>
+ * </ul>
+ *
+ * <p>
+ * Beans such as {@link org.modelmapper.ModelMapper} are declared in their own
+ * {@code @Configuration} classes under {@code config/} to keep this class
+ * minimal.
+ */
 @SpringBootApplication
 @EnableAsync
-@EnableScheduling 
+@EnableScheduling
 public class GpBackendApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(GpBackendApplication.class, args);
-	}
-
-	// @Bean
-    // public ModelMapper modelMapper() {
-    //     return new ModelMapper();
-    // }
+    public static void main(String[] args) {
+        SpringApplication.run(GpBackendApplication.class, args);
+    }
 }
-
-// package com.gp.GP_backend;
-
-// import org.springframework.boot.SpringApplication;
-// import org.springframework.boot.autoconfigure.SpringBootApplication;
-// import org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration;
-// import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
-// import org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration;
-
-// // This tells Spring Boot to completely ignore database setup on startup
-// @SpringBootApplication(exclude = {
-// 		DataSourceAutoConfiguration.class,
-// 		DataSourceTransactionManagerAutoConfiguration.class,
-// 		HibernateJpaAutoConfiguration.class
-// })
-// public class GpBackendApplication {
-
-// 	public static void main(String[] args) {
-// 		SpringApplication.run(GpBackendApplication.class, args);
-// 	}
-
-// }
