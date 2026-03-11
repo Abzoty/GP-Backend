@@ -24,7 +24,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     void revokeAllByFamilyId(@Param("familyId") String familyId);
 
     // logout from all devices
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE RefreshToken r SET r.revoked = true WHERE r.user = :user")
     void revokeAllByUser(@Param("user") User user);
 }

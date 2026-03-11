@@ -3,7 +3,7 @@ package com.gp.GP_backend.domain.user.controller;
 import com.gp.GP_backend.domain.user.dto.*;
 import com.gp.GP_backend.domain.user.entity.RefreshToken;
 import com.gp.GP_backend.domain.user.entity.User;
-import com.gp.GP_backend.domain.user.repository.RefreshTokenRepository;
+// import com.gp.GP_backend.domain.user.repository.RefreshTokenRepository;
 import com.gp.GP_backend.domain.user.service.RefreshTokenService;
 import com.gp.GP_backend.domain.user.service.UserService;
 import com.gp.GP_backend.security.JwtTokenProvider;
@@ -31,7 +31,7 @@ public class AuthController {
         private final AuthenticationManager authenticationManager;
         private final JwtTokenProvider jwtTokenProvider;
         private final ModelMapper modelMapper;
-        private final RefreshTokenRepository refreshTokenRepository;
+        // private final RefreshTokenRepository refreshTokenRepository;
 
         @PostMapping("/register")
         public ResponseEntity<ApiResponse<RegisterResponse>> register(
@@ -99,21 +99,16 @@ public class AuthController {
                 return ResponseEntity.ok(ApiResponse.ok("Token refreshed", authResponse));
         }
 
-        @PostMapping("/logout")
-        public ResponseEntity<ApiResponse<Void>> logout(
-                        @Valid @RequestBody @AuthenticationPrincipal User currentUser) {
-                RefreshToken token = refreshTokenRepository.findByUser(currentUser)
-                                .orElseThrow(() -> new IllegalArgumentException("No active session found"));
-                refreshTokenService.revokeToken(token.getToken());
-                return ResponseEntity.ok(ApiResponse.ok("Logged out successfully", null));
-        }
-
         @PostMapping("/logout-all")
         public ResponseEntity<ApiResponse<Void>> logoutAll(
-                        @Valid @RequestBody RefreshRequest request) {
-                RefreshToken token = refreshTokenRepository.findByToken(request.getRefreshToken())
-                                .orElseThrow(() -> new IllegalArgumentException("Invalid token"));
-                refreshTokenService.revokeAllUserTokens((User) token.getUser());
+                        @AuthenticationPrincipal User currentUser) {
+
+                if (currentUser == null) {
+                        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                                        .body(ApiResponse.fail("Not authenticated"));
+                }
+
+                refreshTokenService.revokeAllUserTokens(currentUser);
                 return ResponseEntity.ok(ApiResponse.ok("Logged out from all devices", null));
         }
 }

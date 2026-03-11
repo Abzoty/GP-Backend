@@ -23,6 +23,8 @@ public class RefreshTokenService {
     // Called on login — starts a new family
     @Transactional
     public RefreshToken createRefreshToken(User user) {
+        refreshTokenRepository.revokeAllByUser(user); // clean old ones
+        refreshTokenRepository.flush();
         RefreshToken token = RefreshToken.builder()
                 .user(user)
                 .token(UUID.randomUUID().toString())
@@ -78,6 +80,19 @@ public class RefreshTokenService {
         refreshTokenRepository.save(token);
     }
 
+    @Transactional
+    public void revokeTokenForUser(String tokenValue, User currentUser) {
+        RefreshToken token = refreshTokenRepository.findByToken(tokenValue)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid refresh token"));
+
+        // Make sure the token belongs to the user making the request
+        if (!token.getUser().getId().equals(currentUser.getId())) {
+            throw new IllegalArgumentException("Token does not belong to current user");
+        }
+
+        token.setRevoked(true);
+        refreshTokenRepository.save(token);
+    }
     // Logout from ALL devices
     @Transactional
     public void revokeAllUserTokens(User user) {
