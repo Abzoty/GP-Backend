@@ -10,25 +10,21 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 
 /**
- * Scheduled job that removes stale refresh tokens from the database.
+ * Nightly scheduled job that purges stale refresh tokens from the database.
  *
  * <p>
- * Without cleanup the {@code refresh_tokens} table would grow unboundedly
- * because:
+ * Without this job, the {@code refresh_tokens} table would grow indefinitely
+ * as users log in and log out over time. Tokens are safe to delete once:
  * <ul>
- * <li>Every login inserts a new row.</li>
- * <li>Every rotation inserts a new row (and marks the old one revoked).</li>
+ * <li>Their {@code expiry_date} has passed (they can no longer be used),
+ * OR</li>
+ * <li>They have been explicitly revoked (logout / reuse detection).</li>
  * </ul>
  *
  * <p>
- * This job runs at 03:00 AM server time every day (low-traffic window) and
- * deletes
- * tokens that are either expired or revoked — neither of which can be used
- * anymore.
- *
- * <p>
- * Requires {@code @EnableScheduling} on
- * {@link com.gp.GP_backend.GpBackendApplication}.
+ * The job runs at 3 AM daily (server time) when load is minimal.
+ * The cron expression {@code "0 0 3 * * *"} means: second=0, minute=0, hour=3,
+ * any day-of-month, any month, any day-of-week.
  */
 @Component
 @RequiredArgsConstructor
@@ -37,18 +33,12 @@ public class TokenCleanupJob {
 
     private final RefreshTokenRepository refreshTokenRepository;
 
-    /**
-     * Deletes all refresh tokens that are expired or revoked.
-     *
-     * <p>
-     * Cron expression {@code "0 0 3 * * *"} = second=0, minute=0, hour=3, every
-     * day.
-     */
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
-    public void cleanupExpiredTokens() {
-        log.info("Running nightly refresh-token cleanup...");
-        refreshTokenRepository.deleteByExpiryDateBeforeOrRevokedTrue(Instant.now());
-        log.info("Refresh-token cleanup complete.");
+    public void cleanupExpiredAndRevokedTokens() {
+        Instant now = Instant.now();
+        log.info("Running nightly token cleanup at {}", now);
+        refreshTokenRepository.deleteByExpiryDateBeforeOrRevokedTrue(now);
+        log.info("Token cleanup complete");
     }
 }

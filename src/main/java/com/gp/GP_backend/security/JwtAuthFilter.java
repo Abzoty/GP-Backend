@@ -17,28 +17,18 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * Stateless JWT authentication filter — runs once per HTTP request.
- *
- * <h3>Filter flow</h3>
- * <ol>
- * <li>Extract the Bearer token from the {@code Authorization} header.</li>
- * <li>Parse the email (subject) from the token without touching the
- * database.</li>
- * <li>If the context is empty (not yet authenticated), load the full
- * {@link UserDetails}
- * from the database and validate the token's signature and expiry.</li>
- * <li>On success, populate the {@link SecurityContextHolder} so downstream
- * controllers can access the current user via
- * {@code @AuthenticationPrincipal}.</li>
- * <li>Always pass the request down the filter chain regardless of outcome —
- * unauthenticated requests are rejected by the security rules in
- * {@link com.gp.GP_backend.config.SecurityConfig}, not here.</li>
- * </ol>
+ * Per-request JWT authentication filter.
  *
  * <p>
- * Extends {@link OncePerRequestFilter} to guarantee a single execution per
- * request,
- * even in async dispatch scenarios.
+ * Runs once per request (guaranteed by {@link OncePerRequestFilter}).
+ * If a valid Bearer token is found, authenticates the user by populating
+ * the {@link SecurityContextHolder} — which makes the user available via
+ * {@code @AuthenticationPrincipal} in controllers.
+ *
+ * <p>
+ * The filter never throws — invalid or missing tokens simply result in
+ * no authentication being set, letting Spring Security apply its own 401
+ * response.
  */
 @Component
 @RequiredArgsConstructor
@@ -60,15 +50,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             try {
                 String email = jwtTokenProvider.extractEmail(token);
 
-                // Only authenticate if there is no existing authentication in the context
-                // (prevents re-processing on forwarded requests)
+                // Only authenticate if not already authenticated in this request
                 if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                     UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
                     if (jwtTokenProvider.validateToken(token, userDetails)) {
-                        // Build an authenticated token and attach request metadata (IP, session)
+                        // Build the Spring Security authentication object
                         UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                                 userDetails, null, userDetails.getAuthorities());
+
+                        // Attach request metadata (IP, session ID) for audit logging
                         authToken.setDetails(
                                 new WebAuthenticationDetailsSource().buildDetails(request));
 
@@ -77,27 +68,22 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     }
                 }
             } catch (Exception e) {
-                // Log the reason but do NOT short-circuit — let Spring Security handle the 401
-                log.debug("JWT authentication failed: {}", e.getMessage());
+                // Log and continue — SecurityContext remains empty → 401 returned by Spring
+                log.debug("JWT processing failed for request to {}: {}", request.getRequestURI(), e.getMessage());
             }
         }
 
-        // Always continue the chain; unauthenticated requests hit the security rules
-        // next
         filterChain.doFilter(request, response);
     }
 
     /**
-     * Extracts the raw JWT string from the {@code Authorization: Bearer <token>}
-     * header.
-     *
-     * @return the token string, or {@code null} if the header is absent or
-     *         malformed
+     * Extracts the raw token from the {@code Authorization: Bearer <token>} header.
+     * Returns null if the header is absent or not in Bearer format.
      */
     private String extractBearerToken(HttpServletRequest request) {
         String header = request.getHeader("Authorization");
         if (StringUtils.hasText(header) && header.startsWith("Bearer ")) {
-            return header.substring(7); // skip "Bearer "
+            return header.substring(7);
         }
         return null;
     }

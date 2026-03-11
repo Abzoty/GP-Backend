@@ -1,9 +1,13 @@
 package com.gp.GP_backend.domain.user.controller;
 
+import com.gp.GP_backend.domain.user.dto.RefreshRequest;
+import com.gp.GP_backend.domain.user.dto.UpdateProfileRequest;
 import com.gp.GP_backend.domain.user.dto.UserResponse;
 import com.gp.GP_backend.domain.user.entity.User;
+import com.gp.GP_backend.domain.user.service.RefreshTokenService;
 import com.gp.GP_backend.domain.user.service.UserService;
 import com.gp.GP_backend.shared.response.ApiResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.http.ResponseEntity;
@@ -11,18 +15,14 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Handles requests related to the authenticated user's own profile.
+ * Endpoints for the currently authenticated user's own account.
  *
  * <p>
- * All endpoints require a valid JWT Bearer token (enforced globally by
+ * All routes require a valid JWT (enforced by
  * {@link com.gp.GP_backend.config.SecurityConfig}).
- *
- * <p>
- * {@code @AuthenticationPrincipal} injects the {@link User} entity that was
- * placed in the
- * {@link org.springframework.security.core.context.SecurityContext}
- * by {@link com.gp.GP_backend.security.JwtAuthFilter} — no extra DB call
- * needed.
+ * The user is injected via {@code @AuthenticationPrincipal} after the
+ * {@link com.gp.GP_backend.security.JwtAuthFilter} populates the
+ * SecurityContext.
  */
 @RestController
 @RequestMapping("/api/v1/users")
@@ -30,26 +30,44 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
+    private final RefreshTokenService refreshTokenService;
     private final ModelMapper modelMapper;
 
-    /**
-     * Returns the current user's profile.
-     *
-     * <p>
-     * Uses the principal already in the security context — avoids a redundant DB
-     * lookup
-     * since {@link com.gp.GP_backend.security.JwtAuthFilter} already loaded the
-     * full
-     * {@link User} entity during JWT validation.
-     *
-     * @param currentUser injected from the security context by
-     *                    {@code @AuthenticationPrincipal}
-     */
-    @GetMapping("/profile/view")
+    /** Returns the profile of the currently authenticated user. */
+    @GetMapping("/profile")
     public ResponseEntity<ApiResponse<UserResponse>> viewProfile(
             @AuthenticationPrincipal User currentUser) {
 
-        UserResponse body = modelMapper.map(currentUser, UserResponse.class);
-        return ResponseEntity.ok(ApiResponse.ok("Profile retrieved", body));
+        // The entity is already loaded by the JWT filter — no additional DB query
+        // needed
+        UserResponse profile = modelMapper.map(currentUser, UserResponse.class);
+        return ResponseEntity.ok(ApiResponse.ok("Profile retrieved", profile));
+    }
+
+    /**
+     * Applies partial updates to the current user's profile.
+     * Null fields in the request body are ignored (PATCH semantics).
+     */
+    @PatchMapping("/profile")
+    public ResponseEntity<ApiResponse<UserResponse>> updateProfile(
+            @AuthenticationPrincipal User currentUser,
+            @Valid @RequestBody UpdateProfileRequest request) {
+
+        User updated = userService.updateProfile(currentUser.getId(), request);
+        return ResponseEntity.ok(ApiResponse.ok("Profile updated", modelMapper.map(updated, UserResponse.class)));
+    }
+
+    /**
+     * Revokes the specific refresh token provided in the request body
+     * (single-device logout).
+     * The JWT access token remains valid until it expires naturally.
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @AuthenticationPrincipal User currentUser,
+            @Valid @RequestBody RefreshRequest request) {
+
+        refreshTokenService.revokeTokenForUser(request.getRefreshToken(), currentUser);
+        return ResponseEntity.ok(ApiResponse.ok("Logged out successfully", null));
     }
 }

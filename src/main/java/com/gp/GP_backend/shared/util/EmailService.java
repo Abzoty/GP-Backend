@@ -8,24 +8,17 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 /**
- * Sends transactional emails via the configured SMTP server.
- *
- * <h3>Async behavior</h3>
- * Every public method is annotated with {@code @Async}, meaning Spring executes
- * them
- * on a thread-pool thread rather than the calling request's thread. This
- * prevents a
- * slow or failing SMTP server from delaying or erroring the HTTP response.
+ * Sends transactional emails using Spring's {@link JavaMailSender}.
  *
  * <p>
- * Requires {@code @EnableAsync} on
- * {@link com.gp.GP_backend.GpBackendApplication}.
+ * All methods are annotated with {@code @Async} so they run on a separate
+ * thread pool and do not block the HTTP request thread. A failed email send
+ * is logged as an error but never propagates to the caller.
  *
- * <h3>Configuration</h3>
- * SMTP credentials are set in {@code application-dev.properties} under
- * {@code spring.mail.*}. For Gmail, use an App Password (not the account
- * password)
- * and set {@code host=smtp.gmail.com}, NOT the email address itself.
+ * <p>
+ * SMTP credentials are configured in {@code application-dev.properties}.
+ * In production, store credentials in environment variables or a secrets
+ * manager.
  */
 @Service
 @RequiredArgsConstructor
@@ -36,13 +29,11 @@ public class EmailService {
 
     /**
      * Sends a welcome email to a newly registered user.
+     * Runs asynchronously — the user's registration response is not delayed by this
+     * call.
      *
-     * <p>
-     * Failures are caught and logged — a broken SMTP configuration must not
-     * prevent the user from completing registration.
-     *
-     * @param toEmail  recipient email address
-     * @param fullName recipient's display name (used for personalisation)
+     * @param toEmail  the recipient's email address.
+     * @param fullName the recipient's display name, used for personalisation.
      */
     @Async
     public void sendWelcomeEmail(String toEmail, String fullName) {
@@ -58,7 +49,7 @@ public class EmailService {
             mailSender.send(message);
             log.info("Welcome email sent to {}", toEmail);
         } catch (Exception e) {
-            // Non-fatal — registration has already succeeded; log and continue
+            // Log and swallow — email failure must not break registration
             log.error("Failed to send welcome email to {}: {}", toEmail, e.getMessage());
         }
     }

@@ -9,23 +9,23 @@ import org.springframework.web.filter.CorsFilter;
 import java.util.List;
 
 /**
- * Configures Cross-Origin Resource Sharing (CORS) for the application.
+ * CORS (Cross-Origin Resource Sharing) configuration.
  *
  * <p>
- * This bean is picked up automatically by {@link SecurityConfig} via
- * {@code .cors(Customizer.withDefaults())}, which looks for a
- * {@link CorsFilter} bean.
- *
- * <h3>Allowed origins</h3>
- * <ul>
- * <li>{@code http://localhost:5173} — Vite dev server (frontend).</li>
- * <li>{@code http://localhost:8080} — local backend itself (Swagger UI).</li>
- * </ul>
+ * Allows the React frontend (Vite dev server) and the Swagger UI
+ * to make authenticated requests to this backend.
  *
  * <p>
- * For production, replace these origins with the actual deployed frontend URL
- * (e.g. {@code https://covalent.example.com}) — NEVER use {@code *} with
- * credentials.
+ * The {@link CorsFilter} bean is picked up automatically by
+ * {@link SecurityConfig} via {@code .cors(Customizer.withDefaults())},
+ * which looks for a bean of type
+ * {@link org.springframework.web.cors.CorsConfigurationSource}
+ * or a {@link CorsFilter} bean in the context.
+ *
+ * <p>
+ * <b>Production note:</b> Replace the allowed origins list with your actual
+ * deployed frontend URL. Never use {@code "*"} with
+ * {@code allowCredentials(true)}.
  */
 @Configuration
 public class CorsConfig {
@@ -34,20 +34,19 @@ public class CorsConfig {
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // Explicit list of trusted origins (wildcard not allowed when credentials =
-        // true)
+        // Explicitly list allowed origins — wildcards cannot be used with credentials
         config.setAllowedOrigins(List.of(
-                "http://localhost:5173", // Vite frontend dev server
-                "http://localhost:8080" // Swagger UI (same host as backend)
+                "http://localhost:5173", // Vite React dev server
+                "http://localhost:8080" // Swagger UI (same-origin requests from browser)
         ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
-        // Allow all request headers — required for the JWT Authorization header
+        // Allow all headers so that the JWT Authorization header passes through
         config.setAllowedHeaders(List.of("*"));
 
-        // Must be true for the browser to include the Authorization header in
-        // cross-origin requests
+        // Required to allow the client to send the Authorization header with
+        // credentials
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -2,12 +2,32 @@ package com.gp.GP_backend.domain.user.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+
 import java.time.Instant;
 
+/**
+ * Persistent refresh token used for JWT rotation.
+ *
+ * <p>
+ * <b>Family-based reuse detection:</b> Every login creates a new
+ * {@code familyId}.
+ * On each refresh, the old token is revoked and a new one is issued in the same
+ * family.
+ * If a revoked token is presented, the entire family is revoked — forcing
+ * re-login.
+ * This detects token theft without storing a full token history.
+ *
+ * <p>
+ * The primary key remains a {@code Long} IDENTITY since this is a purely
+ * internal table
+ * with no external references (no other entity has a FK to refresh_tokens.id).
+ */
 @Entity
 @Table(name = "refresh_tokens")
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
 public class RefreshToken {
 
@@ -15,22 +35,34 @@ public class RefreshToken {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** The opaque token string sent to the client (UUID v4 string). */
     @Column(nullable = false, unique = true)
     private String token;
 
-    @ManyToOne
-    @JoinColumn(name = "user_id")
+    /** The user this token belongs to. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    /**
+     * Groups all tokens issued in a single login session.
+     * If reuse is detected, all tokens sharing this family ID are revoked.
+     */
     @Column(nullable = false)
     private String familyId;
 
+    /** True if this token has been used (rotated) or explicitly revoked. */
     @Column(nullable = false)
     private boolean revoked;
 
+    /** Absolute expiry — checked regardless of the revoked flag. */
     @Column(nullable = false)
     private Instant expiryDate;
 
+    /**
+     * Convenience check used in
+     * {@link com.gp.GP_backend.domain.user.service.RefreshTokenService}.
+     */
     public boolean isExpired() {
         return expiryDate.isBefore(Instant.now());
     }

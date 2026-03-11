@@ -1,54 +1,30 @@
 package com.gp.GP_backend.domain.user.dto;
 
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 /**
- * Public-safe projection of a
- * {@link com.gp.GP_backend.domain.user.entity.User}.
+ * Public-facing user profile data transferred to the client.
  *
  * <p>
- * Excludes sensitive fields ({@code passwordHash}, {@code isActive},
- * timestamps)
- * that the client has no business seeing.
- *
- * <p>
- * Populated by ModelMapper — field names must match the entity's getter names
- * exactly
- * (or be configured with an explicit mapping in
- * {@link com.gp.GP_backend.config.ModelMapperConfig}).
+ * Sensitive fields ({@code passwordHash}, {@code isActive}) are intentionally
+ * excluded. ModelMapper maps {@link com.gp.GP_backend.domain.user.entity.User}
+ * to this class by field name (STRICT strategy), so every field here must
+ * exactly match a field in the entity.
  */
 @Data
-@NoArgsConstructor
 public class UserResponse {
 
-    /** UUID string of the user. */
-    private String id;
-
+    private UUID id;
     private String email;
-
     private String fullName;
-
-    /** University student ID (nullable). */
     private String studentId;
-
-    /** Academic year (1–5). */
-    private Short academicYear;
-
-    /** Current semester number (1–10). */
-    private Short currentSemester;
-
-    /** GPA as DECIMAL(4,2). */
+    private Integer academicYear;
+    private Integer currentSemester;
     private BigDecimal gpa;
-
-    /** Department/major name. */
     private String department;
-
-    /** URL of the user's profile picture. */
     private String imageUrl;
-
-    /** Short bio. */
     private String bio;
 }

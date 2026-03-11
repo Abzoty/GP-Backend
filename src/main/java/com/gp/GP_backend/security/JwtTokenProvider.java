@@ -1,5 +1,6 @@
 package com.gp.GP_backend.security;
 
+import com.gp.GP_backend.domain.user.entity.User;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -12,41 +13,27 @@ import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.UUID;
 
-import com.gp.GP_backend.domain.user.entity.User;
-
 /**
- * Stateless JWT utility — generates, validates, and parses access tokens.
+ * Handles JWT access token creation and validation.
  *
- * <h3>Token structure</h3>
- * 
- * <pre>
- * Header : { alg: HS256 }
- * Payload: {
- *   sub  : "user@example.com",   // login username (email)
- *   uid  : "550e8400-...",       // user UUID — avoids a DB lookup per request
- *   iat  : 1700000000,           // issued-at  (Unix seconds)
- *   exp  : 1700000900            // expiry     (iat + expiration-ms)
- * }
- * </pre>
- *
- * <h3>Security notes</h3>
+ * <p>
+ * Token contents (claims):
  * <ul>
- * <li>The secret key MUST be a valid Base64 string of at least 32 bytes (256
- * bits)
- * for HS256 to function correctly.</li>
- * <li>The key is decoded once per signing/parsing operation; no global state is
- * kept
- * so key rotation just requires a restart.</li>
- * <li>This class is stateless — token revocation is handled via the
- * {@link com.gp.GP_backend.domain.user.entity.RefreshToken} table.</li>
+ * <li>{@code sub} – user's email (the Spring Security "username")</li>
+ * <li>{@code userId} – user's UUID, for fast user lookups without a DB
+ * query</li>
+ * <li>{@code iat} – issued-at timestamp</li>
+ * <li>{@code exp} – expiry timestamp (15 minutes from issue by default)</li>
  * </ul>
+ *
+ * <p>
+ * The signing key is a Base64-encoded HMAC-SHA256 secret defined in
+ * {@code application-dev.properties}. In production, load this from a secrets
+ * manager.
  */
 @Component
 @Slf4j
 public class JwtTokenProvider {
-
-    /** Claim key used to embed the user UUID inside the token payload. */
-    private static final String CLAIM_USER_ID = "uid";
 
     @Value("${jwt.secret}")
     private String jwtSecret;
@@ -54,112 +41,70 @@ public class JwtTokenProvider {
     @Value("${jwt.expiration-ms}")
     private long jwtExpirationMs;
 
-    // ── Key derivation ─────────────────────────────────────────────────────────
+    // ─── Token generation ──────────────────────────────────────────────────────
 
     /**
-     * Decodes the Base64 secret and derives an HMAC-SHA256 signing key.
+     * Creates a signed JWT for the given user.
      *
      * <p>
-     * Called on every sign/verify operation (cheap — just byte decoding + key
-     * wrap).
-     * If the secret is not valid Base64, {@code Decoders.BASE64.decode()} will
-     * throw
-     * an {@link IllegalArgumentException} at startup time during the first token
-     * operation.
-     */
-    private SecretKey getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
-        return Keys.hmacShaKeyFor(keyBytes);
-    }
-
-    // ── Token generation ───────────────────────────────────────────────────────
-
-    /**
-     * Generates a signed JWT access token for the given user.
-     *
-     * <p>
-     * The {@code uid} claim embeds the user's UUID so downstream code can avoid
-     * an extra database round-trip just to resolve an email to an ID.
-     *
-     * @param userDetails must be an instance of {@link User} to extract the UUID
-     * @return compact, URL-safe JWT string (three Base64url segments separated by
-     *         dots)
+     * Casts {@code UserDetails} to {@link User} to access the UUID.
+     * This is safe because our {@link UserDetailsServiceImpl} always returns
+     * a {@link User} instance (which implements {@link UserDetails}).
      */
     public String generateToken(UserDetails userDetails) {
-        JwtBuilder builder = Jwts.builder()
-                .subject(userDetails.getUsername()) // email
+        User user = (User) userDetails;
+
+        return Jwts.builder()
+                .subject(user.getUsername()) // email
+                .claim("userId", user.getId().toString()) // UUID → string
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + jwtExpirationMs))
-                .signWith(getSigningKey());
-
-        // Embed UUID only when we have a full User entity (not a plain UserDetails
-        // stub)
-        if (userDetails instanceof User user) {
-            builder.claim(CLAIM_USER_ID, user.getId().toString());
-        }
-
-        return builder.compact();
+                .signWith(getSigningKey())
+                .compact();
     }
 
-    // ── Token parsing ──────────────────────────────────────────────────────────
+    // ─── Claims extraction ─────────────────────────────────────────────────────
 
-    /**
-     * Extracts the email (subject) from a token without validating expiry.
-     *
-     * @throws JwtException if the token signature is invalid
-     */
+    /** Extracts the email (subject) from a token. */
     public String extractEmail(String token) {
         return parseClaims(token).getSubject();
     }
 
     /**
-     * Extracts the user UUID embedded in the {@code uid} claim.
-     *
-     * @return the user's UUID, or {@code null} if the claim is absent (e.g. legacy
-     *         tokens)
+     * Extracts the user UUID embedded in the {@code userId} claim.
+     * Use this to avoid a database lookup when you only need the ID.
      */
     public UUID extractUserId(String token) {
-        String raw = parseClaims(token).get(CLAIM_USER_ID, String.class);
-        return (raw != null) ? UUID.fromString(raw) : null;
+        String idStr = parseClaims(token).get("userId", String.class);
+        return UUID.fromString(idStr);
     }
 
-    // ── Token validation ───────────────────────────────────────────────────────
+    // ─── Validation ────────────────────────────────────────────────────────────
 
     /**
-     * Full token validation: verifies signature, expiry, and that the subject
-     * matches
-     * the given {@link UserDetails}.
-     *
-     * @param token       JWT string from the {@code Authorization: Bearer} header
-     * @param userDetails loaded from the database for the extracted email
-     * @return {@code true} only if all checks pass
+     * Returns true if the token is cryptographically valid, the subject email
+     * matches the provided {@link UserDetails}, and the token has not expired.
      */
     public boolean validateToken(String token, UserDetails userDetails) {
         try {
             String email = extractEmail(token);
             return email.equals(userDetails.getUsername()) && !isTokenExpired(token);
-        } catch (ExpiredJwtException e) {
-            log.warn("JWT token expired: {}", e.getMessage());
-        } catch (UnsupportedJwtException e) {
-            log.warn("Unsupported JWT token: {}", e.getMessage());
-        } catch (MalformedJwtException e) {
-            log.warn("Malformed JWT token: {}", e.getMessage());
         } catch (JwtException | IllegalArgumentException e) {
-            log.warn("Invalid JWT token: {}", e.getMessage());
+            log.warn("JWT validation failed: {}", e.getMessage());
+            return false;
         }
-        return false;
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────────
+    // ─── Private helpers ───────────────────────────────────────────────────────
 
     private boolean isTokenExpired(String token) {
         return parseClaims(token).getExpiration().before(new Date());
     }
 
     /**
-     * Parses and verifies the JWT signature, returning the decoded claims payload.
-     *
-     * @throws JwtException on any signature or format error
+     * Parses and verifies the token signature, returning the claims payload.
+     * Throws a {@link JwtException} if the token is malformed or the signature is
+     * invalid.
      */
     private Claims parseClaims(String token) {
         return Jwts.parser()
@@ -167,5 +112,11 @@ public class JwtTokenProvider {
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+    }
+
+    /** Decodes the Base64 secret and builds the HMAC-SHA256 signing key. */
+    private SecretKey getSigningKey() {
+        byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 }

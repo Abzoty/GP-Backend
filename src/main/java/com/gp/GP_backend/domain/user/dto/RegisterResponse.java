@@ -5,26 +5,22 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.UUID;
+
 /**
- * Minimal response returned after successful registration.
+ * Minimal confirmation returned after a successful registration.
  *
  * <p>
- * Deliberately excludes tokens — the client must call
- * {@code POST /api/v1/auth/login}
- * to obtain JWT credentials after registration. This keeps the registration
- * endpoint
- * single-responsibility and simplifies email-verification flows in the future.
+ * Intentionally lightweight — the client should call the login endpoint
+ * to obtain tokens and the full user profile.
  */
 @Data
 @Builder
-@AllArgsConstructor
 @NoArgsConstructor
+@AllArgsConstructor
 public class RegisterResponse {
 
-    /** The newly created user's UUID (as String). */
-    private String userId;
-
+    private UUID userId;
     private String email;
-
     private String fullName;
 }

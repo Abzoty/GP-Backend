@@ -1,8 +1,4 @@
-# Sign In:
-- name = admin
-- password = 0123
----
-# when the database connection is set correctly!
-go to 'GP_backend\src\main\java\com\gp\GP_backend\GpBackendApplication.java' and delete the uncommented code, then uncomment the commented one.           
-
-![Database Schema](GP-Backend\src\main\resources\GP-db-image-export.jpg)
+# Notes:
+- Make sure to drop any old DB and create and empty one and the migration will create necessary tables.
+- Before running the project make sure to perform a ```mvn clean package``` 
+- Swagger UI URL: http://localhost:8080/swagger-ui/index.html#/

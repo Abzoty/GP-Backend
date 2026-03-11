@@ -8,21 +8,14 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 /**
- * Connects Spring Security's authentication mechanism to the application's
+ * Bridges Spring Security's authentication mechanism with our
  * {@link UserRepository}.
  *
  * <p>
- * Spring Security calls {@link #loadUserByUsername(String)} during the login
- * flow
- * to fetch the persisted user record. Because
- * {@link com.gp.GP_backend.domain.user.entity.User}
- * implements {@link UserDetails} directly, this adapter simply delegates to the
- * repository
- * with no extra mapping.
- *
- * <p>
- * The "username" in Spring Security's terminology is the email address in this
- * application.
+ * Spring Security calls {@link #loadUserByUsername} during the
+ * {@code AuthenticationManager.authenticate()} flow (login). The returned
+ * {@link com.gp.GP_backend.domain.user.entity.User} implements
+ * {@link UserDetails}, so no adapter wrapper is needed.
  */
 @Service
 @RequiredArgsConstructor
@@ -31,11 +24,9 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     private final UserRepository userRepository;
 
     /**
-     * Loads a user by their email address.
+     * Loads a user by their email address (used as the Spring Security "username").
      *
-     * @param email the login email submitted in the request
-     * @return the matching {@link com.gp.GP_backend.domain.user.entity.User} entity
-     * @throws UsernameNotFoundException if no user with the given email exists
+     * @throws UsernameNotFoundException if no user exists with the given email.
      */
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {

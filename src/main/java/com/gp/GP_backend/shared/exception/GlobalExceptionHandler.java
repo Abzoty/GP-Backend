@@ -5,8 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.DisabledException;
-import org.springframework.security.authentication.LockedException;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -14,29 +13,23 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.stream.Collectors;
 
 /**
- * Centralised exception → HTTP response mapping.
+ * Centralised exception handler for all REST controllers.
  *
  * <p>
- * All {@code @ExceptionHandler} methods return an {@link ApiResponse} envelope
- * so every error response has the same structure as a success response. This
- * keeps
- * the client-side error handling consistent.
+ * Spring's {@code @RestControllerAdvice} intercepts exceptions thrown from
+ * any {@code @RestController} and converts them to structured
+ * {@link ApiResponse} JSON, so controllers never need their own try/catch
+ * blocks.
  *
  * <p>
- * Handler specificity: Spring picks the most specific handler. Add more
- * specific
- * exceptions above the {@link Exception} catch-all to give clients better error
- * messages.
+ * Handler priority: more specific exceptions are listed first.
  */
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
 
-    // ── Validation (400) ───────────────────────────────────────────────────────
-
     /**
-     * Triggered when a {@code @Valid}-annotated request body fails Jakarta Bean
-     * Validation.
+     * Handles Bean Validation failures ({@code @Valid} annotation).
      * Collects all field errors into a single comma-separated message.
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -48,20 +41,18 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Thrown by service-layer guard clauses (e.g. duplicate email, resource not
-     * found).
-     * Maps to 400 Bad Request — the client sent semantically invalid data.
+     * Handles our custom {@link ApiException} — the primary way services
+     * signal business rule violations (409 CONFLICT, 404 NOT FOUND, etc.).
      */
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiResponse<Void>> handleIllegalArg(IllegalArgumentException ex) {
-        return ResponseEntity.badRequest().body(ApiResponse.fail(ex.getMessage()));
+    @ExceptionHandler(ApiException.class)
+    public ResponseEntity<ApiResponse<Void>> handleApiException(ApiException ex) {
+        return ResponseEntity.status(ex.getStatus())
+                .body(ApiResponse.fail(ex.getMessage()));
     }
 
-    // ── Authentication (401) ───────────────────────────────────────────────────
-
     /**
-     * Thrown by Spring Security when email or password is wrong.
-     * Returns 401 with a generic message to avoid leaking whether the email exists.
+     * Handles Spring Security's bad-credentials exception (wrong email/password).
+     * Returns 401 with a deliberately vague message to avoid user enumeration.
      */
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ApiResponse<Void>> handleBadCredentials(BadCredentialsException ex) {
@@ -70,30 +61,19 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Thrown when a user attempts to log in but their account is soft-deleted
-     * ({@link com.gp.GP_backend.domain.user.entity.User#isActive} = false).
+     * Handles access-denied exceptions from Spring Security's method-level
+     * authorisation ({@code @PreAuthorize}, etc.).
      */
-    @ExceptionHandler(DisabledException.class)
-    public ResponseEntity<ApiResponse<Void>> handleDisabled(DisabledException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.fail("Account is disabled. Please contact support."));
+    @ExceptionHandler(AuthorizationDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AuthorizationDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.fail("You do not have permission to perform this action"));
     }
 
     /**
-     * Thrown when a user account is locked (for future brute-force protection).
-     */
-    @ExceptionHandler(LockedException.class)
-    public ResponseEntity<ApiResponse<Void>> handleLocked(LockedException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.fail("Account is locked. Please contact support."));
-    }
-
-    // ── Catch-all (500) ────────────────────────────────────────────────────────
-
-    /**
-     * Safety net for any unhandled exception.
-     * Logs the full stack trace for server-side debugging but returns a generic
-     * message to the client to avoid leaking internal details.
+     * Catch-all handler for any unhandled exception.
+     * Logs the full stack trace (for server-side debugging) but returns a
+     * generic message to the client (to avoid leaking implementation details).
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneral(Exception ex) {

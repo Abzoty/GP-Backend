@@ -8,53 +8,37 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 
 /**
- * Generic HTTP response envelope used by every endpoint in the API.
+ * Standard API envelope returned by every endpoint.
  *
- * <p>
- * Having a consistent envelope means the frontend can always expect:
- * 
- * <pre>
+ * <p>Every response, success or failure, uses this wrapper so that clients
+ * always get a consistent shape to parse:
+ * <pre>{@code
  * {
- *   "success"  : true | false,
- *   "message"  : "Human-readable status",
- *   "data"     : { ... } | null,
- *   "timestamp": "2025-01-01T00:00:00Z"
+ * "success": true,
+ * "message": "Login successful",
+ * "timestamp": "2025-01-01T12:00:00Z",
+ * "data": { ... }
  * }
- * </pre>
+ * }</pre>
  *
- * <p>
- * Use the static factory methods {@link #ok} and {@link #fail} rather than the
- * builder directly — they enforce the correct {@code success} flag.
- *
- * @param <T> the type of the {@code data} payload (use {@code Void} for empty
- *            responses)
+ * @param <T> the type of the {@code data} payload (use {@code Void} when there
+ * is no body).
  */
 @Data
 @Builder
-@AllArgsConstructor
 @NoArgsConstructor
+@AllArgsConstructor
 public class ApiResponse<T> {
 
-    /** {@code true} on success (2xx), {@code false} on error (4xx / 5xx). */
     private boolean success;
-
-    /** Short human-readable description of the result. */
     private String message;
-
-    /**
-     * The response payload, or {@code null} for operations that produce no data.
-     */
     private T data;
 
-    /**
-     * Server-side UTC timestamp of the response — useful for debugging clock-skew.
-     */
+    /** Server-side timestamp of when the response was generated (UTC). */
     @Builder.Default
     private Instant timestamp = Instant.now();
 
-    // ── Factory methods ────────────────────────────────────────────────────────
-
-    /** Creates a success response with a message and data payload. */
+    /** Convenience factory for successful responses. */
     public static <T> ApiResponse<T> ok(String message, T data) {
         return ApiResponse.<T>builder()
                 .success(true)
@@ -63,7 +47,7 @@ public class ApiResponse<T> {
                 .build();
     }
 
-    /** Creates a failure response with an error message and no data. */
+    /** Convenience factory for error responses (data will be null). */
     public static <T> ApiResponse<T> fail(String message) {
         return ApiResponse.<T>builder()
                 .success(false)

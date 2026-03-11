@@ -7,22 +7,21 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Data-access layer for {@link User}.
+ * Spring Data JPA repository for {@link User}.
  *
  * <p>
- * Extends {@link JpaRepository} with {@code UUID} as the primary-key type,
- * giving standard CRUD operations plus pagination for free.
+ * The generic type parameter {@code UUID} matches the new primary key type.
+ * All standard CRUD methods (findById, save, delete, etc.) are inherited from
+ * {@link JpaRepository} and work automatically.
  */
 public interface UserRepository extends JpaRepository<User, UUID> {
 
-    /**
-     * Used by Spring Security's {@code UserDetailsService} to load a user at login.
-     */
+    /** Used during authentication to look up a user by their login email. */
     Optional<User> findByEmail(String email);
 
-    /** Pre-registration duplicate check for email uniqueness. */
+    /** Checked during registration to prevent duplicate email addresses. */
     boolean existsByEmail(String email);
 
-    /** Pre-registration duplicate check for student-ID uniqueness. */
+    /** Checked during registration to prevent duplicate student IDs. */
     boolean existsByStudentId(String studentId);
 }

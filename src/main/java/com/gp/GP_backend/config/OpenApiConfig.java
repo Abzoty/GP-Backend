@@ -2,6 +2,7 @@ package com.gp.GP_backend.config;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
@@ -10,51 +11,50 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Configures Swagger / OpenAPI documentation (available at
- * {@code /swagger-ui/index.html}).
+ * Configures the OpenAPI (Swagger) documentation available at:
+ * <ul>
+ * <li>Swagger UI: {@code /swagger-ui/index.html}</li>
+ * <li>OpenAPI spec: {@code /v3/api-docs}</li>
+ * </ul>
  *
- * <h3>JWT in Swagger UI</h3>
- * The {@code bearerAuth} security scheme adds an "Authorize" button to Swagger
- * UI.
- * After logging in via {@code POST /api/v1/auth/login}, paste the returned
- * {@code token}
- * value (WITHOUT the "Bearer " prefix — Swagger adds it automatically) into the
- * Authorize dialog. All subsequent requests will include the
- * {@code Authorization: Bearer}
- * header automatically.
+ * <p>
+ * The Bearer token scheme is applied globally so that the "Authorize" button
+ * in Swagger UI pre-fills the {@code Authorization: Bearer <token>} header
+ * for every request. Copy a token from the login response and paste it there.
  */
 @Configuration
 public class OpenApiConfig {
 
+        private static final String SECURITY_SCHEME_NAME = "bearerAuth";
+
         @Bean
         public OpenAPI customOpenAPI() {
-                final String securitySchemeName = "bearerAuth";
-
                 return new OpenAPI()
-                                // Apply JWT auth globally — every endpoint shows the lock icon
-                                .addSecurityItem(new SecurityRequirement().addList(securitySchemeName))
+                                // Apply the bearer auth scheme to all endpoints by default
+                                .addSecurityItem(new SecurityRequirement().addList(SECURITY_SCHEME_NAME))
                                 .components(new Components()
-                                                .addSecuritySchemes(securitySchemeName,
+                                                .addSecuritySchemes(SECURITY_SCHEME_NAME,
                                                                 new SecurityScheme()
-                                                                                .name(securitySchemeName)
+                                                                                .name(SECURITY_SCHEME_NAME)
                                                                                 .type(SecurityScheme.Type.HTTP)
                                                                                 .scheme("bearer")
                                                                                 .bearerFormat("JWT")
-                                                                                .description("Paste the access token from POST /api/v1/auth/login")))
+                                                                                .description("Paste your JWT access token here (without 'Bearer ' prefix)")))
                                 .info(new Info()
-                                                .title("Covalent — GP Backend API")
-                                                .version("2.0")
-                                                .description("REST API for the Covalent academic community platform"));
+                                                .title("Covalent GP Backend API")
+                                                .description("REST API documentation for the Covalent graduation project platform")
+                                                .version("1.0")
+                                                .contact(new Contact().name("Covalent Team")));
         }
 
         /**
-         * Groups all API endpoints under a single "public-apis" group in Swagger UI.
-         * Add more groups here if you want to split the documentation by domain.
+         * Groups all API endpoints under one group for the Swagger UI dropdown.
+         * Add more groups here if you want to separate public vs. private APIs.
          */
         @Bean
         public GroupedOpenApi publicApi() {
                 return GroupedOpenApi.builder()
-                                .group("public-apis")
+                                .group("all-endpoints")
                                 .pathsToMatch("/**")
                                 .build();
         }

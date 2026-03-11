@@ -3,8 +3,10 @@ package com.gp.GP_backend.domain.user.service;
 import com.gp.GP_backend.domain.user.entity.RefreshToken;
 import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.domain.user.repository.RefreshTokenRepository;
+import com.gp.GP_backend.shared.exception.ApiException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,51 +14,46 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Manages the lifecycle of refresh tokens: creation, rotation, and revocation.
+ * Manages refresh token lifecycle with family-based rotation.
  *
- * <h3>Token-family model (RFC-style)</h3>
- * <ul>
- * <li><b>Login</b> → new token + new family ID.</li>
- * <li><b>Refresh</b> → old token revoked, new token issued in the same
- * family.</li>
- * <li><b>Reuse detected</b> (revoked token presented) → entire family revoked,
- * forcing re-login on all sessions from that login chain.</li>
- * <li><b>Logout single device</b> → revoke the presented token only.</li>
- * <li><b>Logout all devices</b> → revoke all tokens for the user.</li>
- * </ul>
+ * <p>
+ * <b>Rotation strategy (RFC 6749 / OAuth 2.0 best practice):</b>
+ * <ol>
+ * <li>On login: Revoke all existing tokens for the user. Issue a new token in a
+ * new family.</li>
+ * <li>On refresh: Mark the old token as revoked. Issue a new token in the
+ * <em>same</em> family.</li>
+ * <li>On reuse: If a revoked token is presented, revoke the <em>entire
+ * family</em> and reject
+ * the request — this indicates a stolen token is being replayed.</li>
+ * </ol>
  */
 @Service
 @RequiredArgsConstructor
 public class RefreshTokenService {
 
-    /**
-     * Refresh token TTL, injected from {@code jwt.refresh-expiration-ms} property.
-     */
     @Value("${jwt.refresh-expiration-ms}")
     private long refreshExpirationMs;
 
     private final RefreshTokenRepository refreshTokenRepository;
 
-    // ── Creation ───────────────────────────────────────────────────────────────
-
     /**
-     * Creates a brand-new refresh token for the given user (called on every
-     * successful login).
-     *
-     * <p>
-     * A new {@link RefreshToken#getFamilyId() familyId} is generated per login so
-     * that
-     * multiple concurrent device sessions are tracked independently.
-     *
-     * @param user the authenticated user
-     * @return the persisted {@link RefreshToken}
+     * Issues a brand-new refresh token for a user after login.
+     * All previous tokens for this user are revoked first to enforce single-session
+     * semantics.
+     * A new {@code familyId} is generated to start a fresh rotation chain.
      */
     @Transactional
     public RefreshToken createRefreshToken(User user) {
+        // Revoke all old tokens before issuing a new one (prevents session
+        // accumulation)
+        refreshTokenRepository.revokeAllByUser(user);
+        refreshTokenRepository.flush(); // ensure revocation is written before the new insert
+
         RefreshToken token = RefreshToken.builder()
                 .user(user)
-                .token(UUID.randomUUID().toString()) // opaque random value
-                .familyId(UUID.randomUUID().toString()) // new family per login session
+                .token(UUID.randomUUID().toString()) // opaque token string
+                .familyId(UUID.randomUUID().toString()) // new family = new login session
                 .revoked(false)
                 .expiryDate(Instant.now().plusMillis(refreshExpirationMs))
                 .build();
@@ -64,52 +61,39 @@ public class RefreshTokenService {
         return refreshTokenRepository.save(token);
     }
 
-    // ── Rotation ───────────────────────────────────────────────────────────────
-
     /**
-     * Validates the old token and issues a new one in the same family (token
-     * rotation).
+     * Rotates the refresh token: validates the old one, revokes it, and issues a
+     * new one
+     * within the same family.
      *
-     * <p>
-     * Rotation ensures that a stolen refresh token is usable only once — if the
-     * attacker rotates it first, the legitimate user's next request will trigger
-     * the
-     * reuse-detection path and invalidate all sessions in that family.
-     *
-     * @param oldTokenValue the raw token string from the client's request body
-     * @return the newly issued {@link RefreshToken}
-     * @throws IllegalArgumentException on invalid, revoked, or expired tokens
+     * @throws ApiException 401 if the token is unknown, already used, or expired.
      */
     @Transactional
     public RefreshToken rotateRefreshToken(String oldTokenValue) {
         RefreshToken oldToken = refreshTokenRepository.findByToken(oldTokenValue)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid refresh token"));
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Invalid refresh token"));
 
-        // ── Reuse detection ────────────────────────────────────────────────────
-        // A revoked token being presented again means either:
-        // (a) the client has a bug and is re-sending an old token, or
-        // (b) an attacker stole the token and rotated it before the legitimate user.
-        // Either way, revoke the entire family to force re-login.
+        // Reuse detected — the token was already consumed. Possible token theft.
         if (oldToken.isRevoked()) {
+            // Revoke the entire family to invalidate all active sessions from this login
             refreshTokenRepository.revokeAllByFamilyId(oldToken.getFamilyId());
-            throw new IllegalArgumentException(
-                    "Refresh token reuse detected. All sessions in this login have been " +
-                            "invalidated for your security. Please log in again.");
+            throw new ApiException(HttpStatus.UNAUTHORIZED,
+                    "Refresh token reuse detected. All sessions have been invalidated. Please log in again.");
         }
 
         if (oldToken.isExpired()) {
-            throw new IllegalArgumentException("Refresh token has expired. Please log in again.");
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "Refresh token has expired. Please log in again.");
         }
 
-        // Revoke the old token (makes it a "used" token)
+        // Consume the old token
         oldToken.setRevoked(true);
         refreshTokenRepository.save(oldToken);
 
-        // Issue a replacement token in the same family
+        // Issue a new token in the same family
         RefreshToken newToken = RefreshToken.builder()
                 .user(oldToken.getUser())
                 .token(UUID.randomUUID().toString())
-                .familyId(oldToken.getFamilyId()) // same family = same device session
+                .familyId(oldToken.getFamilyId()) // same family = same login session
                 .revoked(false)
                 .expiryDate(Instant.now().plusMillis(refreshExpirationMs))
                 .build();
@@ -117,48 +101,32 @@ public class RefreshTokenService {
         return refreshTokenRepository.save(newToken);
     }
 
-    // ── Revocation ─────────────────────────────────────────────────────────────
-
     /**
-     * Logs out from the current device by revoking the presented refresh token.
+     * Revokes a specific refresh token (single-device logout).
+     * Validates that the token belongs to {@code currentUser} to prevent cross-user
+     * revocation.
      *
-     * @param tokenValue the raw token string to revoke
-     * @throws IllegalArgumentException if the token does not exist
+     * @throws ApiException 401 if token is invalid or doesn't belong to the user.
      */
     @Transactional
-    public void revokeToken(String tokenValue) {
+    public void revokeTokenForUser(String tokenValue, User currentUser) {
         RefreshToken token = refreshTokenRepository.findByToken(tokenValue)
-                .orElseThrow(() -> new IllegalArgumentException("Refresh token not found"));
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Invalid refresh token"));
+
+        if (!token.getUser().getId().equals(currentUser.getId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Token does not belong to the current user");
+        }
+
         token.setRevoked(true);
         refreshTokenRepository.save(token);
     }
 
     /**
-     * Logs out from ALL devices by revoking every refresh token for a user.
-     *
-     * @param user the user whose tokens should all be revoked
+     * Revokes ALL refresh tokens for a user (logout from all devices).
+     * The user must re-authenticate on every device after this call.
      */
     @Transactional
     public void revokeAllUserTokens(User user) {
         refreshTokenRepository.revokeAllByUser(user);
-    }
-
-    /**
-     * Resolves the {@link User} from a raw refresh token string.
-     *
-     * <p>
-     * Used by the /logout-all endpoint to identify the account without
-     * performing a full rotation (wasteful when we are about to revoke everything
-     * anyway).
-     *
-     * @param tokenValue the raw token string
-     * @return the owning {@link User}
-     * @throws IllegalArgumentException if the token does not exist
-     */
-    @Transactional(readOnly = true)
-    public User getUserFromToken(String tokenValue) {
-        return refreshTokenRepository.findByToken(tokenValue)
-                .map(t -> (User) t.getUser())
-                .orElseThrow(() -> new IllegalArgumentException("Invalid refresh token"));
     }
 }

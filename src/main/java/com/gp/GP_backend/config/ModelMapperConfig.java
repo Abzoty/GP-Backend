@@ -1,70 +1,46 @@
 package com.gp.GP_backend.config;
 
 import com.gp.GP_backend.domain.user.dto.RegisterRequest;
-import com.gp.GP_backend.domain.user.dto.UserResponse;
 import com.gp.GP_backend.domain.user.entity.User;
-import org.modelmapper.Converter;
 import org.modelmapper.ModelMapper;
 import org.modelmapper.convention.MatchingStrategies;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.UUID;
-
 /**
- * Configures the {@link ModelMapper} bean used throughout the application for
- * DTO <=> Entity conversions.
+ * Configures the {@link ModelMapper} bean used for DTO ↔ Entity mapping.
  *
- * <h3>Strategy</h3>
- * {@link MatchingStrategies#STRICT} is used so that fields are only mapped when
- * their names match exactly (no fuzzy/partial matching). This prevents
- * accidental
- * mapping of unrelated fields and makes the configuration explicit and
- * predictable.
+ * <p>
+ * We use {@link MatchingStrategies#STRICT} to prevent accidental field
+ * mappings (the default STANDARD strategy can match fields with similar names
+ * even if types differ, leading to subtle bugs).
  *
- * <h3>Custom mappings</h3>
- * <ul>
- * <li>{@link RegisterRequest} to {@link User}: passwordHash is skipped because
- * the field names differ (password vs passwordHash) AND encoding is handled
- * in UserService, not here.</li>
- * <li>{@link User} to {@link UserResponse}: id (UUID) is converted to String
- * via a typed Converter. A plain lambda like src -> src.getId().toString()
- * does NOT work -- ModelMapper uses bytecode proxying to record property access
- * and calling .toString() on the proxy throws an ErrorsException at
- * startup.</li>
- * </ul>
+ * <p>
+ * Explicit type maps are defined here for cases where field names differ
+ * or certain fields must be skipped (e.g. the password field).
  */
 @Configuration
 public class ModelMapperConfig {
 
-        @Bean
-        public ModelMapper modelMapper() {
-                ModelMapper mapper = new ModelMapper();
+    @Bean
+    public ModelMapper modelMapper() {
+        ModelMapper mapper = new ModelMapper();
 
-                // Strict: only map fields whose names are identical -- no fuzzy matching
-                mapper.getConfiguration()
-                                .setMatchingStrategy(MatchingStrategies.STRICT);
+        // STRICT: only map fields where both name AND type match exactly
+        mapper.getConfiguration()
+                .setMatchingStrategy(MatchingStrategies.STRICT);
 
-                // -- RegisterRequest -> User -------------------------------------------
-                // Skip passwordHash -- set manually after BCrypt encoding in UserService.
-                mapper.typeMap(RegisterRequest.class, User.class)
-                                .addMappings(m -> m.skip(User::setPasswordHash));
+        // RegisterRequest → User
+        // Skip the passwordHash field — it is not present in RegisterRequest.
+        // The raw password is encoded manually in UserService before being set.
+        mapper.typeMap(RegisterRequest.class, User.class)
+                .addMappings(m -> m.skip(User::setPasswordHash));
 
-                // -- User -> UserResponse ----------------------------------------------
-                // UUID -> String conversion using a typed Converter.
-                //
-                // WHY a Converter and not m.map(src -> src.getId().toString(), ...)?
-                // ModelMapper's addMappings() uses a proxy of the source class to "record"
-                // which getter was called. Calling .toString() on that proxy fails because
-                // ModelMapper cannot intercept it -- it throws an ErrorsException at bean
-                // creation time. A Converter receives the already-resolved UUID value, so
-                // calling .toString() on it is safe.
-                Converter<UUID, String> uuidToString = ctx -> ctx.getSource() != null ? ctx.getSource().toString()
-                                : null;
+        // User → UserResponse
+        // No explicit mapping needed: all UserResponse fields are present in User
+        // with the same names and types (UUID id, String email, etc.).
+        // ModelMapper STRICT finds them automatically.
 
-                mapper.typeMap(User.class, UserResponse.class)
-                                .addMappings(m -> m.using(uuidToString).map(User::getId, UserResponse::setId));
-
-                return mapper;
-        }
+        return mapper;
+    }
 }
