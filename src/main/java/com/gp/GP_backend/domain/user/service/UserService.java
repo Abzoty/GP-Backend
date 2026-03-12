@@ -72,29 +72,12 @@ public class UserService {
     }
 
     /**
-     * Applies non-null fields from the request to the user's profile.
-     * A field in the request is ignored if it is null (partial update / PATCH
-     * semantics).
+     * update the user profile using the applyPatch method to account for partial updates.
      */
     @Transactional
     public User updateProfile(UUID userId, UpdateProfileRequest request) {
         User user = getUserById(userId);
-
-        if (request.getFullName() != null)
-            user.setFullName(request.getFullName());
-        if (request.getAcademicYear() != null)
-            user.setAcademicYear(request.getAcademicYear());
-        if (request.getCurrentSemester() != null)
-            user.setCurrentSemester(request.getCurrentSemester());
-        if (request.getGpa() != null)
-            user.setGpa(request.getGpa());
-        if (request.getDepartment() != null)
-            user.setDepartment(request.getDepartment());
-        if (request.getImageUrl() != null)
-            user.setImageUrl(request.getImageUrl());
-        if (request.getBio() != null)
-            user.setBio(request.getBio());
-
+        user.applyPatch(request);
         return userRepository.save(user);
     }
 

@@ -1,13 +1,9 @@
 package com.gp.GP_backend.domain.user.dto;
 
-import jakarta.validation.constraints.DecimalMax;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
-
-import java.math.BigDecimal;
 
 /**
  * Payload for {@code PATCH /api/v1/users/profile}.
@@ -26,10 +22,6 @@ public class UpdateProfileRequest {
     @Min(1)
     @Max(10)
     private Integer currentSemester;
-
-    @DecimalMin("0.0")
-    @DecimalMax("4.0")
-    private BigDecimal gpa;
 
     private String department;
     private String imageUrl;

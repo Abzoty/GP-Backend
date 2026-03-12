@@ -4,6 +4,7 @@ import com.gp.GP_backend.shared.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -80,5 +81,16 @@ public class GlobalExceptionHandler {
         log.error("Unhandled exception: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.fail("An unexpected error occurred. Please try again later."));
+    }
+
+    /**
+     * Handles malformed JSON in request bodies.
+     * The exception message often contains the specific syntax error, which can
+     * be helpful for clients.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnreadable(HttpMessageNotReadableException ex) {
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.fail("Malformed JSON request: " + ex.getMostSpecificCause().getMessage()));
     }
 }

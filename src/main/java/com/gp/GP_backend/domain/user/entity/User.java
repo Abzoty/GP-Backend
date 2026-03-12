@@ -6,10 +6,13 @@ import org.hibernate.annotations.UpdateTimestamp;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import com.gp.GP_backend.domain.user.dto.UpdateProfileRequest;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -133,4 +136,14 @@ public class User implements UserDetails {
     public boolean isEnabled() {
         return Boolean.TRUE.equals(this.isActive);
     }
+
+    // ─── Lean logic for applying profile updates ─────────────────────────
+    public void applyPatch(UpdateProfileRequest request) {
+    Optional.ofNullable(request.getFullName()).ifPresent(this::setFullName);
+    Optional.ofNullable(request.getAcademicYear()).ifPresent(this::setAcademicYear);
+    Optional.ofNullable(request.getCurrentSemester()).ifPresent(this::setCurrentSemester);
+    Optional.ofNullable(request.getDepartment()).ifPresent(this::setDepartment);
+    Optional.ofNullable(request.getImageUrl()).ifPresent(this::setImageUrl);
+    Optional.ofNullable(request.getBio()).ifPresent(this::setBio);
+}
 }
