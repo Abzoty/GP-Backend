@@ -55,10 +55,6 @@ public class UserService {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new ApiException(HttpStatus.CONFLICT, "Email is already registered");
         }
-        if (request.getStudentId() != null &&
-                userRepository.existsByStudentId(request.getStudentId())) {
-            throw new ApiException(HttpStatus.CONFLICT, "Student ID is already registered");
-        }
 
         // Map all matching fields; passwordHash is skipped (configured in
         // ModelMapperConfig)

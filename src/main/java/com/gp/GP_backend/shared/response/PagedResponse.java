@@ -12,7 +12,7 @@ import java.util.List;
  * Paginated list response included inside {@link ApiResponse#getData()}.
  *
  * <p>
- * Wraps Spring Data's {@link Page} into a clean, serialisable DTO
+ * Wraps Spring Data's {@link Page} into a clean, serializable DTO
  * that avoids exposing internal Spring types to the API client.
  *
  * <p>

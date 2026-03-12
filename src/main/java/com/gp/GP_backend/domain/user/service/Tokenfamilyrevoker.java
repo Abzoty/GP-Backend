@@ -24,17 +24,13 @@ import org.springframework.transaction.annotation.Transactional;
  * and was called internally, its {@code Propagation.REQUIRES_NEW} would
  * silently do
  * nothing — it would just join the caller's existing transaction instead of
- * creating
- * a new one. The family revocation would then be rolled back along with the
- * outer
+ * creating a new one. The family revocation would then be rolled back along with the outer
  * transaction when the 401 exception was thrown, leaving the DB unchanged.
- *
  * <p>
  * By extracting this into its own {@code @Component}, Spring wraps it in its
- * own
- * proxy. When {@link RefreshTokenService} injects and calls this bean, the call
- * goes
- * through the proxy, and {@code REQUIRES_NEW} creates a genuine independent
+ * own proxy. 
+ * When {@link RefreshTokenService} injects and calls this bean, the call
+ * goes through the proxy, and {@code REQUIRES_NEW} creates a genuine independent
  * transaction
  * that commits immediately — before the caller throws its exception.
  */

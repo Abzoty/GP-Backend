@@ -50,8 +50,8 @@ public class RefreshToken {
      * or to check credentials. Using LAZY here causes a
      * {@code LazyInitializationException}
      * when the service method's {@code @Transactional} boundary closes before the
-     * controller
-     * accesses {@code token.getUser()}. EAGER avoids an extra query in practice
+     * controller accesses {@code token.getUser()}. 
+     * EAGER avoids an extra query in practice
      * because
      * {@code findByToken()} always retrieves the user in the same join anyway.
      */

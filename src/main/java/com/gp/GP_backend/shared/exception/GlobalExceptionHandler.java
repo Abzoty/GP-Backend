@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.stream.Collectors;
 
 /**
- * Centralised exception handler for all REST controllers.
+ * Centralized exception handler for all REST controllers.
  *
  * <p>
  * Spring's {@code @RestControllerAdvice} intercepts exceptions thrown from
