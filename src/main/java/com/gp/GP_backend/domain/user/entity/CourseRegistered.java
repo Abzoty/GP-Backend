@@ -3,6 +3,7 @@ package com.gp.GP_backend.domain.user.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 /**
@@ -47,6 +48,8 @@ public class CourseRegistered {
     @Column(length = 5)
     private String grade;
 
+    @Column(name = "result", precision = 3, scale = 1)
+    private BigDecimal result;
     /**
      * True if the student is currently enrolled in this course.
      * False for historical/completed courses.

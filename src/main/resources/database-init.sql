@@ -98,6 +98,7 @@ CREATE TABLE courses_registered (
     semester      SMALLINT,
     academic_year SMALLINT,
     grade         VARCHAR(5),
+    result        DECIMAL(3,1),
     is_current    BIT              DEFAULT 1,
     CONSTRAINT FK_Course_User FOREIGN KEY (user_id) REFERENCES users(id)
 );
