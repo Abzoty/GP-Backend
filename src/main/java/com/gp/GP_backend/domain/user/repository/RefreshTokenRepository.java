@@ -37,7 +37,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
      * {@code clearAutomatically = true} clears the persistence context after
      * the bulk UPDATE so that subsequent reads reflect the new state.
      */
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE RefreshToken r SET r.revoked = true WHERE r.user = :user")
     void revokeAllByUser(@Param("user") User user);
 

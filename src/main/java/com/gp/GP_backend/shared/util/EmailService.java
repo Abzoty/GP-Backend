@@ -11,14 +11,13 @@ import org.springframework.stereotype.Service;
  * Sends transactional emails using Spring's {@link JavaMailSender}.
  *
  * <p>
- * All methods are annotated with {@code @Async} so they run on a separate
- * thread pool and do not block the HTTP request thread. A failed email send
- * is logged as an error but never propagates to the caller.
+ * All methods are {@code @Async} so they run on a background thread pool and
+ * never block the HTTP request. Failures are logged but never propagated to
+ * the caller — email delivery is best-effort.
  *
  * <p>
  * SMTP credentials are configured in {@code application-dev.properties}.
- * In production, store credentials in environment variables or a secrets
- * manager.
+ * In production, load them from environment variables or a secrets manager.
  */
 @Service
 @RequiredArgsConstructor
@@ -29,8 +28,6 @@ public class EmailService {
 
     /**
      * Sends a welcome email to a newly registered user.
-     * Runs asynchronously — the user's registration response is not delayed by this
-     * call.
      *
      * @param toEmail  the recipient's email address.
      * @param fullName the recipient's display name, used for personalisation.
@@ -49,8 +46,41 @@ public class EmailService {
             mailSender.send(message);
             log.info("Welcome email sent to {}", toEmail);
         } catch (Exception e) {
-            // Log and swallow — email failure must not break registration
+            // Email failure must not break registration
             log.error("Failed to send welcome email to {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    /**
+     * Sends a password-reset link to the user's email address.
+     *
+     * <p>
+     * The {@code resetLink} contains the raw token as a query parameter.
+     * The token is valid for 15 minutes and is single-use.
+     *
+     * @param toEmail   the recipient's email address.
+     * @param fullName  the recipient's display name.
+     * @param resetLink the full URL the user should visit to set a new password.
+     */
+    @Async
+    public void sendPasswordResetEmail(String toEmail, String fullName, String resetLink) {
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(toEmail);
+            message.setSubject("Reset your Covalent password");
+            message.setText(
+                    "Hi " + fullName + ",\n\n" +
+                            "We received a request to reset your password. Click the link below to proceed:\n\n" +
+                            resetLink + "\n\n" +
+                            "This link expires in 15 minutes and can only be used once.\n\n" +
+                            "If you did not request a password reset, you can safely ignore this email.\n\n" +
+                            "— The Covalent Team");
+            mailSender.send(message);
+            log.info("Password reset email sent to {}", toEmail);
+        } catch (Exception e) {
+            // Email failure is logged; the service layer already committed the token to the
+            // DB
+            log.error("Failed to send password reset email to {}: {}", toEmail, e.getMessage());
         }
     }
 }

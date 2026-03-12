@@ -1,9 +1,11 @@
 package com.gp.GP_backend.domain.user.controller;
 
+import com.gp.GP_backend.domain.user.dto.ChangePasswordRequest;
 import com.gp.GP_backend.domain.user.dto.RefreshRequest;
 import com.gp.GP_backend.domain.user.dto.UpdateProfileRequest;
 import com.gp.GP_backend.domain.user.dto.UserResponse;
 import com.gp.GP_backend.domain.user.entity.User;
+import com.gp.GP_backend.domain.user.service.PasswordResetService;
 import com.gp.GP_backend.domain.user.service.RefreshTokenService;
 import com.gp.GP_backend.domain.user.service.UserService;
 import com.gp.GP_backend.shared.response.ApiResponse;
@@ -31,6 +33,7 @@ public class UserController {
 
     private final UserService userService;
     private final RefreshTokenService refreshTokenService;
+    private final PasswordResetService passwordResetService;
     private final ModelMapper modelMapper;
 
     /** Returns the profile of the currently authenticated user. */
@@ -38,8 +41,7 @@ public class UserController {
     public ResponseEntity<ApiResponse<UserResponse>> viewProfile(
             @AuthenticationPrincipal User currentUser) {
 
-        // The entity is already loaded by the JWT filter — no additional DB query
-        // needed
+        // Entity already loaded by the JWT filter — no additional DB query needed
         UserResponse profile = modelMapper.map(currentUser, UserResponse.class);
         return ResponseEntity.ok(ApiResponse.ok("Profile retrieved", profile));
     }
@@ -55,6 +57,25 @@ public class UserController {
 
         User updated = userService.updateProfile(currentUser.getId(), request);
         return ResponseEntity.ok(ApiResponse.ok("Profile updated", modelMapper.map(updated, UserResponse.class)));
+    }
+
+    /**
+     * Changes the password for the authenticated user.
+     *
+     * <p>
+     * Requires the current password to prevent a stolen JWT from being used to
+     * lock the legitimate user out of their account. All refresh tokens are revoked
+     * on success, prompting re-login on every device.
+     */
+    @PostMapping("/change-password")
+    public ResponseEntity<ApiResponse<Void>> changePassword(
+            @AuthenticationPrincipal User currentUser,
+            @Valid @RequestBody ChangePasswordRequest request) {
+
+        passwordResetService.changePassword(
+                currentUser, request.getCurrentPassword(), request.getNewPassword());
+
+        return ResponseEntity.ok(ApiResponse.ok("Password changed successfully. Please log in again.", null));
     }
 
     /**

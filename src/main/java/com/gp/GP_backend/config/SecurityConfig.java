@@ -27,9 +27,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * <ul>
  * <li><b>STATELESS sessions:</b> No HTTP session is created; every request must
  * carry a JWT.</li>
- * <li><b>CSRF disabled:</b> Safe for a stateless API because there are no
- * cookies carrying
- * session state that a CSRF attack could exploit.</li>
+ * <li><b>CSRF disabled:</b> Safe for a stateless API — no session cookies to
+ * exploit.</li>
  * <li><b>CORS:</b> Delegated to the {@link CorsConfig} bean via
  * {@code Customizer.withDefaults()}.</li>
  * </ul>
@@ -45,10 +44,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // Use the CorsFilter bean defined in CorsConfig
                 .cors(Customizer.withDefaults())
-
-                // No session cookies — pure stateless REST API
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
@@ -58,26 +54,25 @@ public class SecurityConfig {
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/refresh",
-                                "/swagger-ui/**", // Swagger UI static assets
+                                "/api/v1/auth/forgot-password", // unauthenticated — user can't log in
+                                "/api/v1/auth/reset-password", // unauthenticated — consumes emailed token
+                                "/swagger-ui/**",
                                 "/swagger-ui.html",
-                                "/v3/api-docs/**", // OpenAPI spec (JSON/YAML)
+                                "/v3/api-docs/**",
                                 "/v3/api-docs.yaml",
-                                "/scalar/**" // Scalar API reference (springdoc 3.x)
-                        ).permitAll()
-                        // Every other request must have a valid JWT
+                                "/scalar/**")
+                        .permitAll()
                         .anyRequest().authenticated())
 
                 .authenticationProvider(authenticationProvider())
-
-                // Run our JWT filter before Spring's default username/password filter
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
     /**
-     * Wires our {@link UserDetailsServiceImpl} and BCrypt password encoder into
-     * the DAO-based authentication provider used by {@link AuthenticationManager}.
+     * Wires our {@link UserDetailsServiceImpl} and BCrypt encoder into the
+     * DAO-based authentication provider used by {@link AuthenticationManager}.
      */
     @Bean
     public AuthenticationProvider authenticationProvider() {
@@ -87,8 +82,8 @@ public class SecurityConfig {
     }
 
     /**
-     * Exposes the {@link AuthenticationManager} as a bean so that
-     * {@link com.gp.GP_backend.domain.user.controller.AuthController} can inject it
+     * Exposes the {@link AuthenticationManager} as a bean so {@link
+     * com.gp.GP_backend.domain.user.controller.AuthController} can inject it
      * to manually authenticate login requests.
      */
     @Bean
@@ -97,10 +92,7 @@ public class SecurityConfig {
         return config.getAuthenticationManager();
     }
 
-    /**
-     * BCrypt password encoder with default strength (10 rounds).
-     * Increasing the strength improves security at the cost of hashing speed.
-     */
+    /** BCrypt password encoder with default strength (10 rounds). */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
