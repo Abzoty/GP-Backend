@@ -1,26 +1,41 @@
 package com.gp.GP_backend.domain.user.dto;
 
 import jakarta.validation.constraints.*;
-import lombok.*;
+import lombok.Data;
 
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+/**
+ * Payload for the {@code POST /api/v1/auth/register} endpoint.
+ *
+ * <p>
+ * Bean Validation annotations enforce constraints before the request
+ * reaches the service layer. All validation errors are collected and
+ * returned together by
+ * {@link com.gp.GP_backend.shared.exception.GlobalExceptionHandler}.
+ */
+@Data
 public class RegisterRequest {
 
+    @NotBlank(message = "Full name is required")
+    private String fullName;
+
     @NotBlank
-    @Email
+    @Email(message = "Must be a valid email address")
     private String email;
 
     @NotBlank
     @Size(min = 8, message = "Password must be at least 8 characters")
     private String password;
 
-    @NotBlank
-    @Size(max = 150)
-    private String fullName;
-
+    /** Optional — not required for registration but must be unique if provided. */
     private String studentId;
-    private Short academicYear;
-    private Short currentSemester;
-    private String department;
+
+    /** 1 = First year … 5 = Fifth year. */
+    @Min(1)
+    @Max(5)
+    private Integer academicYear;
+
+    /** 1 = First semester … 10 = Tenth semester (across all academic years). */
+    @Min(1)
+    @Max(10)
+    private Integer currentSemester;
 }
