@@ -74,6 +74,56 @@ public class SpaceController {
                 .body(ApiResponse.ok("Space created successfully", created));
     }
 
+    // ─── GetSpaceById ─────────────────────────────────────────────────────────────────
+
+    @GetMapping("/{spaceId}")
+    public ResponseEntity<ApiResponse<?>> getSpace(
+            @PathVariable UUID spaceId,
+            @AuthenticationPrincipal User currentUser){
+                UUID userId= currentUser.getId();
+        SpaceResponse space = spaceService.getSpaceById(spaceId, userId);
+
+        if (space != null) {
+            return ResponseEntity.ok(ApiResponse.ok("Space retrieved successfully", space));
+        }
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.<SpaceResponse>builder()
+                        .success(false)
+                        .message("Space not found")
+                        .build());
+    }
+
+
+    @GetMapping("all-spaces")
+    public ResponseEntity<ApiResponse<?>> getAllSpaces(
+            @AuthenticationPrincipal User currentUser){
+                UUID userId= currentUser.getId();
+        List<SpaceResponse> spaces = spaceService.getSpacesByUserId(userId);
+
+        if (spaces != null && !spaces.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.ok("Spaces retrieved successfully", spaces));
+        }
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.<SpaceResponse>builder()
+                        .success(false)
+                        .message("No spaces found for the user")
+                        .build());
+    }
+
+    @GetMapping("active-spaces")
+    public ResponseEntity<ApiResponse<?>> getActiveSpaces(){
+        List<SpaceResponse> spaces = spaceService.getAllSpaces();
+
+        if (spaces != null && !spaces.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.ok("Spaces retrieved successfully", spaces));
+        }
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.<SpaceResponse>builder()
+                        .success(false)
+                        .message("No Active spaces found")
+                        .build());
+    }
+
     // ─── Join ─────────────────────────────────────────────────────────────────
 
     /**

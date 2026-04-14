@@ -5,6 +5,7 @@ import com.gp.GP_backend.domain.space.entity.SpaceCategory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 import java.util.Optional;
@@ -39,4 +40,9 @@ public interface SpaceRepository extends JpaRepository<Space, UUID> {
      * returns all active spaces in the given category for pairwise comparison.
      */
     List<Space> findByCategoryAndIsActiveTrue(SpaceCategory category);
+
+    List<Space> findAll();
+    
+    @Query("SELECT s FROM Space s WHERE s.isActive = true")
+    List<Space> findAllActiveSpaces();
 }

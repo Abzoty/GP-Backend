@@ -342,6 +342,35 @@ public class SpaceService {
         return candidate;
     }
 
+    private boolean isMemberInSpace(UUID spaceId, UUID userId) {
+        return membershipRepository.existsBySpaceIdAndUserId(spaceId, userId);
+    }
+
+    @Transactional
+    public SpaceResponse getSpaceById(UUID spaceId, UUID userId) {
+        if (isMemberInSpace(spaceId, userId)){
+            Space space = requireSpace(spaceId);
+            return toResponse(space);
+        }
+        return null;
+    }
+
+    @Transactional
+    public List<SpaceResponse> getSpacesByUserId(UUID userId) {
+        List<SpaceMembership> memberships = membershipRepository.findByUserId(userId);
+        return memberships.stream()
+                .map(m -> toResponse(m.getSpace()))
+                .toList();
+    }
+
+    @Transactional
+    public List<SpaceResponse> getAllSpaces() {
+        List<Space> spaces = spaceRepository.findAllActiveSpaces();
+        return spaces.stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
     private boolean isSlugTaken(String slug, UUID excludeSpaceId) {
         if (excludeSpaceId == null) {
             return spaceRepository.existsBySlug(slug);

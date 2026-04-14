@@ -32,4 +32,6 @@ public interface SpaceMembershipRepository extends JpaRepository<SpaceMembership
 
     /** Whether a user already belongs to a space — duplicate-join guard. */
     boolean existsBySpaceIdAndUserId(UUID spaceId, UUID userId);
+
+    List<SpaceMembership> findByUserId(UUID userId);
 }
