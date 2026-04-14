@@ -22,6 +22,9 @@ import java.util.UUID;
  * <li>{@code MODERATOR} – all member actions + pin/delete posts</li>
  * <li>{@code OWNER} – all moderator actions + manage members/space
  * settings</li>
+ * <li>{@code ADMIN} – full control: edit space details, grant admin to others,
+ * and perform all OWNER actions. The space creator is
+ * automatically assigned this role on creation.</li>
  * </ul>
  */
 @Entity
@@ -47,7 +50,7 @@ public class SpaceMembership {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    /** MEMBER / MODERATOR / OWNER — see class-level Javadoc. */
+    /** MEMBER / MODERATOR / OWNER / ADMIN — see class-level Javadoc. */
     @Column(length = 20)
     @Builder.Default
     private String role = "MEMBER";

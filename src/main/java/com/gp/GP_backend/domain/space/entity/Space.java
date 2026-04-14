@@ -15,8 +15,11 @@ import java.util.UUID;
  * Each space has a URL-friendly {@code slug} generated from its name.
  *
  * <p>
- * Spaces can be tied to a specific {@code courseCode} so that the course
- * recommendation engine can suggest relevant spaces to new students.
+ * The {@code category} field is an enum ({@link SpaceCategory}) that also
+ * drives the duplicate-detection logic during creation:
+ * {@link SpaceCategory#COLLEGE_COURSE} spaces are matched by
+ * {@code courseCode};
+ * all other categories use text-similarity on {@code name + description}.
  */
 @Entity
 @Table(name = "spaces")
@@ -45,13 +48,23 @@ public class Space {
     @Column(length = 1000)
     private String description;
 
-    /** Broad category (e.g. "Computer Science", "Engineering"). */
-    @Column(length = 80)
-    private String category;
+    /**
+     * Category enum stored as its name string in the database.
+     * Values: {@link SpaceCategory#COLLEGE_COURSE},
+     * {@link SpaceCategory#COMPUTER_SCIENCE},
+     * {@link SpaceCategory#ENGINEERING}, {@link SpaceCategory#MATHEMATICS},
+     * {@link SpaceCategory#PHYSICS}, {@link SpaceCategory#CHEMISTRY},
+     * {@link SpaceCategory#BIOLOGY}, {@link SpaceCategory#ARTS},
+     * {@link SpaceCategory#BUSINESS}, {@link SpaceCategory#GENERAL}.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private SpaceCategory category;
 
     /**
      * Optional course code that links this space to a specific course (e.g.
      * "CS301").
+     * Required for {@link SpaceCategory#COLLEGE_COURSE} spaces.
      */
     @Column(name = "course_code", length = 30)
     private String courseCode;
