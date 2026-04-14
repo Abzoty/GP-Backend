@@ -20,26 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * Business logic for space creation, membership management, and similarity
- * detection.
- *
- * <p>
- * <b>Space creation flow (force=0):</b>
- * <ol>
- * <li>If {@code category == COLLEGE_COURSE}: return existing spaces with the
- * same
- * {@code courseCode} as a 409 conflict list (caller decides via
- * {@code force=1}).</li>
- * <li>Otherwise: compute Jaccard text-similarity on {@code name + description}
- * against
- * active spaces in the same category; return any with score &gt; 0 as a 409
- * list.</li>
- * <li>If no conflicts, or {@code force=1}: persist the space and add the
- * creator as
- * an {@code ADMIN} member.</li>
- * </ol>
- */
+
 @Service
 @RequiredArgsConstructor
 public class SpaceService {

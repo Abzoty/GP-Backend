@@ -10,7 +10,6 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/** Read-only representation of a Space returned to the client. */
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,13 +21,7 @@ public class SpaceResponse {
     private String name;
     private String slug;
     private String description;
-
-    /**
-     * String name of the
-     * {@link com.gp.GP_backend.domain.space.entity.SpaceCategory} enum value.
-     */
     private String category;
-
     private String courseCode;
     private UUID createdById;
     private String createdByName;

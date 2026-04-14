@@ -9,10 +9,7 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Read-only snapshot of a single {@code space_memberships} row returned to the
- * client.
- */
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -26,7 +23,7 @@ public class MembershipResponse {
     private UUID userId;
     private String userName;
 
-    /** MEMBER / MODERATOR / OWNER / ADMIN */
+    /** MEMBER / ADMIN */
     private String role;
 
     private LocalDateTime joinedAt;

@@ -17,24 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * REST controller for Space endpoints.
- *
- * <p>
- * All endpoints require a valid JWT (enforced by
- * {@link com.gp.GP_backend.config.SecurityConfig}).
- * The authenticated user is injected via {@code @AuthenticationPrincipal}.
- *
- * <p>
- * <b>Space creation ({@code POST /api/v1/spaces?force=0|1}):</b>
- * <ul>
- * <li>{@code force=0} (default) — runs the duplicate/similarity check first.
- * Returns {@code 409 CONFLICT} with a list of conflicting spaces if any are
- * found,
- * allowing the client to decide whether to proceed.</li>
- * <li>{@code force=1} — skips the check and creates the space immediately.</li>
- * </ul>
- */
+
 @RestController
 @RequestMapping("/api/v1/spaces")
 @RequiredArgsConstructor

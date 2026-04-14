@@ -7,9 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Repository for {@link SpaceMembership} entities.
- */
+
 public interface SpaceMembershipRepository extends JpaRepository<SpaceMembership, UUID> {
 
     /**

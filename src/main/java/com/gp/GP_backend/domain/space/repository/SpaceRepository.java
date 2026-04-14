@@ -10,9 +10,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Repository for {@link Space} entities.
- */
+
 public interface SpaceRepository extends JpaRepository<Space, UUID> {
 
     /** Used to check slug uniqueness before creating a new space. */
@@ -33,10 +31,7 @@ public interface SpaceRepository extends JpaRepository<Space, UUID> {
     /** Returns all active spaces, newest first, paginated. */
     Page<Space> findByIsActiveTrueOrderByCreatedAtDesc(Pageable pageable);
 
-    /**
-     * Used by the {@link SpaceCategory#COLLEGE_COURSE} duplicate check:
-     * returns all spaces that share the same course code, newest first.
-     */
+     /** returns all spaces that share the same course code, newest first. */
     List<Space> findByCourseCodeOrderByCreatedAtDesc(String courseCode);
 
     /**
