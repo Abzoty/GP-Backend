@@ -1,18 +1,16 @@
 package com.gp.GP_backend.domain.post.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-import java.util.UUID;
-
-/** Payload for POST /api/v1/answers — submits an answer to a post. */
+/**
+ * Request body for US-015 — Answer a question in a space.
+ */
 @Data
 public class CreateAnswerRequest {
 
-    @NotNull
-    private UUID postId;
-
-    @NotBlank
+    @NotBlank(message = "Answer body is required")
+    @Size(min = 10, message = "Answer must be at least 10 characters")
     private String body;
 }

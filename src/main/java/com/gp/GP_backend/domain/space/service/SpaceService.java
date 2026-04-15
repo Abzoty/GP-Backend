@@ -342,7 +342,7 @@ public class SpaceService {
         return candidate;
     }
 
-    private boolean isMemberInSpace(UUID spaceId, UUID userId) {
+    public boolean isMemberInSpace(UUID spaceId, UUID userId) {
         return membershipRepository.existsBySpaceIdAndUserId(spaceId, userId);
     }
 

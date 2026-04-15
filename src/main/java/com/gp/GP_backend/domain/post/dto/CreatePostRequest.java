@@ -1,32 +1,27 @@
 package com.gp.GP_backend.domain.post.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-import java.util.UUID;
-
-/** Payload for POST /api/v1/posts — creates a new post inside a space. */
+/**
+ * Request body for US-014 — Create a question post in a space.
+ *
+ * <p>Validation rules from the acceptance criteria:
+ * <ul>
+ *   <li>Title: 10–300 characters</li>
+ *   <li>Body: minimum 30 characters</li>
+ *   <li>Tags: max 5, each tag max 30 characters</li>
+ * </ul>
+ */
 @Data
 public class CreatePostRequest {
 
-    @NotNull
-    private UUID spaceId;
-
-    @NotBlank
-    @Size(max = 300)
+    @NotBlank(message = "Title is required")
+    @Size(min = 10, max = 300, message = "Title must be between 10 and 300 characters")
     private String title;
 
-    @NotBlank
+    @NotBlank(message = "Body is required")
+    @Size(min = 30, message = "Body must be at least 30 characters")
     private String body;
-
-    /** QUESTION (default) or DISCUSSION. */
-    @Pattern(regexp = "QUESTION|DISCUSSION")
-    private String postType = "QUESTION";
-
-    /** Comma-separated tags, e.g. "java,spring". Max 500 chars. */
-    @Size(max = 500)
-    private String tags;
 }

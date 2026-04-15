@@ -1,39 +1,26 @@
 package com.gp.GP_backend.domain.post.entity;
 
-import com.gp.GP_backend.domain.space.entity.Space;
-import com.gp.GP_backend.domain.user.entity.User;
-import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 /**
- * A post is the primary content unit within a {@link Space}.
+ * Represents a question or discussion post inside a Space.
  *
- * <p>
- * Two types:
- * <ul>
- * <li>{@code QUESTION} – expects a single accepted answer; has an
- * {@code is_solved} flag.</li>
- * <li>{@code DISCUSSION} – open-ended; no accepted answer concept.</li>
- * </ul>
+ * <p>Primary key uses Hibernate's UUID strategy (generated before INSERT),
+ * consistent with the rest of the project's entities.
  *
- * <p>
- * <b>Circular FK note:</b> {@code posts.accepted_answer_id} →
- * {@code answers.id} creates
- * a circular dependency with {@code answers.post_id} → {@code posts.id}.
- * Hibernate resolves this by inserting the post first (accepted_answer_id =
- * NULL),
- * then inserting the answer, then updating the post. The DB constraint is named
- * {@code FK_Post_AcceptedAnswer} to make schema diffs readable.
+ * <p>Tags are stored as a comma-separated string in a single column
+ * (max 5 tags enforced at the service layer).
  */
 @Entity
-@Table(name = "posts")
+@Table(name = "posts", indexes = {
+        @Index(name = "idx_posts_space_created", columnList = "space_id, created_at")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -46,69 +33,46 @@ public class Post {
     @Column(columnDefinition = "UNIQUEIDENTIFIER", updatable = false, nullable = false)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "space_id", nullable = false)
-    private Space space;
+    /** FK → spaces.id — not a JPA association to keep cross-domain coupling minimal. */
+    @Column(name = "space_id", nullable = false,
+            columnDefinition = "UNIQUEIDENTIFIER")
+    private UUID spaceId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "author_id", nullable = false)
-    private User author;
+    /** FK → users.id */
+    @Column(name = "author_id", nullable = false,
+            columnDefinition = "UNIQUEIDENTIFIER")
+    private UUID authorId;
 
     @Column(nullable = false, length = 300)
     private String title;
 
-    /** Rich text body — stored as NVARCHAR(MAX) to support Unicode/Arabic. */
-    @Column(nullable = false, columnDefinition = "NVARCHAR(MAX)")
+    @Column(columnDefinition = "NVARCHAR(MAX)", nullable = false)
     private String body;
 
-    /** QUESTION or DISCUSSION — see class-level Javadoc. */
-    @Column(name = "post_type", length = 20)
-    @Builder.Default
-    private String postType = "QUESTION";
 
-    /** True once the author has accepted an answer (QUESTION type only). */
-    @Column(name = "is_solved")
+    @Column(name = "is_solved", nullable = false)
     @Builder.Default
     private Boolean isSolved = false;
 
-    /**
-     * The answer chosen by the post author as the correct/best answer.
-     * Null until explicitly set. Changing this also updates {@code isSolved}.
-     * See the named FK constraint note in the class Javadoc.
-     */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "accepted_answer_id", foreignKey = @ForeignKey(name = "FK_Post_AcceptedAnswer"))
-    private Answer acceptedAnswer;
+    /** Set when a question author accepts an answer. */
+    @Column(name = "accepted_answer_id",
+            columnDefinition = "UNIQUEIDENTIFIER")
+    private UUID acceptedAnswerId;
 
-    /** Incremented each time the post detail page is loaded. */
-    @Column(name = "view_count")
+    @Column(name = "view_count", nullable = false)
     @Builder.Default
     private Integer viewCount = 0;
 
-    /** Number of "Good Question" votes received. */
-    @Column(name = "good_question_count")
+    /** Equivalent of "upvotes" on the question itself (Good Question feature). */
+    @Column(name = "good_question_count", nullable = false)
     @Builder.Default
     private Integer goodQuestionCount = 0;
 
-    /** Comma-separated tags (e.g. "java,spring,jpa"). Max 500 chars. */
-    @Column(length = 500)
-    private String tags;
-
+    @CreationTimestamp
     @Column(name = "created_at", updatable = false)
-    @Builder.Default
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt;
 
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
-
-    /**
-     * Owned answers for this post. CascadeType.ALL ensures answers are deleted
-     * when their post is deleted. {@code @JsonManagedReference} prevents
-     * infinite JSON recursion when entities are serialised directly.
-     */
-    @JsonManagedReference
-    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
-    @Builder.Default
-    private List<Answer> answers = new ArrayList<>();
 }
