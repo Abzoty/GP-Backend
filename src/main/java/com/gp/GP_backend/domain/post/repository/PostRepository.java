@@ -34,4 +34,11 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
 
     @Query("SELECT p.spaceId FROM Post p WHERE p.id = :postId")
     UUID findSpaceIdByPostId(@Param("postId") UUID postId);
+
+    @Query("SELECT p.authorId FROM Post p WHERE p.id = :postId")
+    UUID findAuthorIdByPostId(@Param("postId") UUID postId);
+
+    @Modifying
+    @Query("UPDATE Post p SET p.isSolved = true, p.acceptedAnswerId = :answerId WHERE p.id = :postId")
+    void markAsSolved(@Param("postId") UUID postId, @Param("answerId") UUID answerId);
 }

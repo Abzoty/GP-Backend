@@ -5,6 +5,7 @@ import com.gp.GP_backend.domain.post.dto.CreatePostRequest;
 import com.gp.GP_backend.domain.post.dto.AnswerResponse;
 import com.gp.GP_backend.domain.post.dto.PostResponse;
 import com.gp.GP_backend.domain.post.service.PostService;
+import com.gp.GP_backend.domain.post.service.VoteService;
 import com.gp.GP_backend.domain.space.service.SpaceService;
 import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.shared.exception.ApiException;
@@ -43,6 +44,7 @@ public class PostController {
 
     private final PostService postService;
     private final SpaceService spaceService;
+    private final VoteService voteService;
 
     // ─── US-014: Create a post ────────────────────────────────────────────────
 
@@ -68,6 +70,51 @@ public class PostController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Post created successfully", post));
+    }
+
+
+    @PostMapping("/api/v1/spaces/posts/{postId}")
+    @Operation(summary = "mark post as good question (US-017)")
+    public ResponseEntity<ApiResponse<?>> goodQuestionPost(
+            @PathVariable UUID postId,
+            @AuthenticationPrincipal User user) {
+        boolean isDone = voteService.markGoodQuestion(postId, user);
+        if (!isDone) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Unable to mark post as good question");
+        }
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.ok("Post marked as good question", null));
+    }
+
+
+    @PostMapping("/api/v1/spaces/posts/{postId}/answers/{answerId}")
+    @Operation(summary = "mark post as solved (US-018)")
+    public ResponseEntity<ApiResponse<?>> markPostAsSolved(
+            @PathVariable UUID postId,
+            @PathVariable UUID answerId,
+            @AuthenticationPrincipal User user) {
+        boolean isDone = postService.markQuestionAsSolved(postId, answerId, user);
+        if (!isDone) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Unable to mark post as solved");
+        }
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.ok("Post marked as solved", null));
+    }
+
+    @PostMapping("/api/v1/spaces/posts/answers/{answerId}")
+    @Operation(summary = "mark post as solved (US-018)")
+    public ResponseEntity<ApiResponse<?>> upvoteAnswer(
+            @PathVariable UUID answerId,
+            @AuthenticationPrincipal User user) {
+        boolean isDone = voteService.upvoteGoodAnswer(answerId, user);
+        if (!isDone) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Unable to upvote answer");
+        }
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.ok("Answer upvoted successfully", null));
     }
 
     // ─── Get a single post ────────────────────────────────────────────────────

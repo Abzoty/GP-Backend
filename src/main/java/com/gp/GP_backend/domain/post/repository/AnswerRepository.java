@@ -26,5 +26,9 @@ public interface AnswerRepository extends JpaRepository<Answer, UUID> {
     @Query("UPDATE Answer a SET a.upvoteCount = a.upvoteCount + 1 WHERE a.id = :id")
     void incrementUpvoteCount(@Param("id") UUID id);
 
+    @Modifying
+    @Query("UPDATE Answer a SET a.isAccepted = true WHERE a.id = :id")
+    void markAsAccepted(@Param("id") UUID answerId);
+
     int countByPostId(UUID postId);
 }

@@ -45,4 +45,6 @@ public interface SpaceRepository extends JpaRepository<Space, UUID> {
     
     @Query("SELECT s FROM Space s WHERE s.isActive = true")
     List<Space> findAllActiveSpaces();
+
+    Optional<Space> findById(UUID id);
 }

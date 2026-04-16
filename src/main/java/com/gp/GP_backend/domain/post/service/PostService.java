@@ -171,6 +171,29 @@ public class PostService {
         return toAnswerResponse(saved, authorName);
         }
 
+        // ======================= mark question as solver =========================
+
+        @Transactional
+        public boolean markQuestionAsSolved(UUID postId, UUID answerId, User user) {
+                Post post = postRepository.findById(postId)
+                        .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                "Post not found with id: " + postId));
+                if (!post.getAuthorId().equals(user.getId())) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                "Only the question author can mark it as solved");
+                }
+                Answer answer = answerRepository.findById(answerId)
+                        .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                "Answer not found with id: " + answerId));
+                if (!answer.getPostId().equals(postId)) {
+                        throw new ApiException(HttpStatus.BAD_REQUEST,
+                                "Answer does not belong to the specified post");
+                }
+                answerRepository.markAsAccepted(answerId);
+                postRepository.markAsSolved(postId, answerId);
+                return true;
+        }
+
     // ─── Read operations ──────────────────────────────────────────────────────
 
     /**
@@ -192,6 +215,7 @@ public class PostService {
         return toPostResponse(post, author.getFullName(), answerCount);
         }
 
+                
     // ─── Mapping helpers ──────────────────────────────────────────────────────
 
     /**
