@@ -2,6 +2,9 @@ package com.gp.GP_backend.domain.post.controller;
 
 import com.gp.GP_backend.domain.post.dto.CreateAnswerRequest;
 import com.gp.GP_backend.domain.post.dto.CreatePostRequest;
+import com.gp.GP_backend.domain.post.dto.EditAnswerRequest;
+import com.gp.GP_backend.domain.post.dto.EditPostRequest;
+import com.gp.GP_backend.domain.post.dto.AllPostsResponse;
 import com.gp.GP_backend.domain.post.dto.AnswerResponse;
 import com.gp.GP_backend.domain.post.dto.PostResponse;
 import com.gp.GP_backend.domain.post.service.PostService;
@@ -20,6 +23,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -87,6 +91,32 @@ public class PostController {
                 .body(ApiResponse.ok("Post marked as good question", null));
     }
 
+    @PutMapping("/api/v1/spaces/posts/{postId}")
+    @Operation(summary = "Edit an existing post")
+    public ResponseEntity<ApiResponse<Boolean>> editPost(
+        @PathVariable UUID postId,
+        @Valid @RequestBody EditPostRequest request,
+        @AuthenticationPrincipal User user) {
+        boolean isEdited = postService.editPost(request, user.getId(), postId);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.ok("Post edited successfully", isEdited));
+    }
+
+
+    @DeleteMapping("/api/v1/spaces/posts/{postId}")
+    @Operation(summary = "Delete an existing post")
+    public ResponseEntity<ApiResponse<Boolean>> deletePost(
+        @PathVariable UUID postId,
+        @AuthenticationPrincipal User user) {
+        boolean isDeleted = postService.deletePost(postId, user.getId());
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.ok("Post deleted successfully", isDeleted));
+    }
+
 
     @PostMapping("/api/v1/spaces/posts/{postId}/answers/{answerId}")
     @Operation(summary = "mark post as solved (US-018)")
@@ -104,7 +134,7 @@ public class PostController {
     }
 
     @PostMapping("/api/v1/spaces/posts/answers/{answerId}")
-    @Operation(summary = "mark post as solved (US-018)")
+    @Operation(summary = "upvote answer (US-016)")
     public ResponseEntity<ApiResponse<?>> upvoteAnswer(
             @PathVariable UUID answerId,
             @AuthenticationPrincipal User user) {
@@ -136,6 +166,24 @@ public class PostController {
         return ResponseEntity.ok(ApiResponse.ok("Post retrieved", post));
     }
 
+
+    @GetMapping("/api/v1/posts/{postId}/answers/{page}/{size}")
+    @Operation(summary = "Get all post answers")
+    public ResponseEntity<ApiResponse<List<AnswerResponse>>> getPost(@PathVariable UUID postId, @AuthenticationPrincipal User user,
+        @PathVariable int page, @PathVariable int size
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok("Post Answers retrieved", postService.getPostAnswers(postId, user.getId(), page, size)));
+    }
+
+
+    @GetMapping("/api/v1/posts/all-posts/{spaceId}/{page}/{size}")
+    @Operation(summary = "Get all posts of space ordered by creation date")
+    public ResponseEntity<ApiResponse<List<AllPostsResponse>>> allPosts(@PathVariable UUID spaceId, 
+        @AuthenticationPrincipal User user, @PathVariable int page, @PathVariable int size) {
+        List<AllPostsResponse> posts = postService.getAllPost(user.getId(), spaceId, page, size);
+        return ResponseEntity.ok(ApiResponse.ok("Posts retrieved", posts));
+    }
+
     // ─── US-015: Answer a post ────────────────────────────────────────────────
 
     /**
@@ -161,4 +209,33 @@ public class PostController {
                 .status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Answer submitted successfully", answer));
     }
+
+
+    @PutMapping("/api/v1/answers/{answerId}")
+    @Operation(summary = "Edit an existing answer")
+    public ResponseEntity<ApiResponse<Boolean>> editAnswer(
+            @PathVariable UUID answerId,
+            @Valid @RequestBody EditAnswerRequest request,
+            @AuthenticationPrincipal User user) {
+
+        boolean isEdited = postService.editAnswer(request, user.getId(), answerId);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.ok("Answer edited successfully", isEdited));
+    }
+
+    @DeleteMapping("/api/v1/answers/{answerId}")
+    @Operation(summary = "Delete an existing answer")
+    public ResponseEntity<ApiResponse<Boolean>> deleteAnswer(
+            @PathVariable UUID answerId,
+            @AuthenticationPrincipal User user) {
+
+        boolean isDeleted = postService.deleteAnswer(answerId, user.getId());
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.ok("Answer deleted successfully", isDeleted));
+    }
+
 }

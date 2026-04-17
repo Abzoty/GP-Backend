@@ -22,20 +22,28 @@ import org.springframework.http.HttpStatus;
 @Getter
 public class ApiException extends RuntimeException {
 
-    /** The HTTP status code to return to the client. */
     private final HttpStatus status;
+    private final String details;
 
     public ApiException(HttpStatus status, String message) {
         super(message);
         this.status = status;
+        this.details = null;
     }
 
-    /**
-     * Wraps a cause exception while preserving the original stack trace.
-     * Useful when rethrowing lower-level exceptions with a friendlier message.
-     */
+    public ApiException(HttpStatus status, String message, String details) {
+        super(message);
+        this.status = status;
+        this.details = details;
+    }
+
     public ApiException(HttpStatus status, String message, Throwable cause) {
         super(message, cause);
         this.status = status;
+        this.details = null;
+    }
+
+    public String getDetails() {
+        return details;
     }
 }

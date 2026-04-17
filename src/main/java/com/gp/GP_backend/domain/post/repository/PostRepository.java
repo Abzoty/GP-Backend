@@ -41,4 +41,7 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
     @Modifying
     @Query("UPDATE Post p SET p.isSolved = true, p.acceptedAnswerId = :answerId WHERE p.id = :postId")
     void markAsSolved(@Param("postId") UUID postId, @Param("answerId") UUID answerId);
+
+    @Query("SELECT s.name FROM Post p JOIN Space s ON p.spaceId = s.id WHERE p.id = :postId")
+    String findSpaceNameByPostId(UUID postId);
 }

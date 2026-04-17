@@ -119,4 +119,8 @@ public class VoteService {
                 voteRepository.save(newVote);
                 return true;
         }
+
+        public boolean hasMarkedGoodQuestion(UUID currentUserId, UUID postId){
+                return voteRepository.existsByTargetIdAndTargetTypeAndUserId(postId, TargetType.QUESTION, currentUserId);
+        }
 }

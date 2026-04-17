@@ -31,4 +31,13 @@ public interface AnswerRepository extends JpaRepository<Answer, UUID> {
     void markAsAccepted(@Param("id") UUID answerId);
 
     int countByPostId(UUID postId);
+
+    @Query("SELECT COUNT(a) FROM Answer a WHERE a.postId = :postId")
+    int getAnswerCountByPostId(UUID postId);
+
+    @Query("SELECT u.fullName FROM Answer a, User u WHERE a.id = :answerId AND a.authorId = u.id")
+    String findAuthorNameByAnswerId(UUID answerId);
+
+    @Query("DELETE FROM Answer a WHERE a.postId = :postId")
+    void deleteByPostId(UUID postId);
 }

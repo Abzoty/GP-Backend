@@ -2,24 +2,36 @@ package com.gp.GP_backend.domain.post.service;
 
 import com.gp.GP_backend.domain.post.dto.CreateAnswerRequest;
 import com.gp.GP_backend.domain.post.dto.CreatePostRequest;
+import com.gp.GP_backend.domain.post.dto.EditAnswerRequest;
+import com.gp.GP_backend.domain.post.dto.EditPostRequest;
+import com.gp.GP_backend.domain.post.dto.AllPostsResponse;
+import com.gp.GP_backend.domain.post.dto.AllPostsResponse.AnswerSummary;
 import com.gp.GP_backend.domain.post.dto.AnswerResponse;
 import com.gp.GP_backend.domain.post.dto.PostResponse;
 import com.gp.GP_backend.domain.post.entity.Answer;
 import com.gp.GP_backend.domain.post.entity.Post;
 import com.gp.GP_backend.domain.post.repository.AnswerRepository;
 import com.gp.GP_backend.domain.post.repository.PostRepository;
+import com.gp.GP_backend.domain.space.entity.Space;
 import com.gp.GP_backend.domain.space.repository.SpaceMembershipRepository;
+import com.gp.GP_backend.domain.space.repository.SpaceRepository;
 import com.gp.GP_backend.domain.user.entity.User;
+import com.gp.GP_backend.domain.user.repository.UserRepository;
 import com.gp.GP_backend.domain.user.service.GamificationService;
 import com.gp.GP_backend.domain.user.service.UserService;
 import com.gp.GP_backend.shared.exception.ApiException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -51,6 +63,8 @@ public class PostService {
         private final AnswerRepository         answerRepository;
         private final SpaceMembershipRepository spaceMembershipRepository;
         private final UserService              userService;
+        private final UserRepository            userRepository;
+        private final SpaceRepository           spaceRepository;
         // private final GamificationService     gamificationService;
 
     // NotificationService is injected optionally so the feature compiles even
@@ -109,6 +123,35 @@ public class PostService {
 
         public UUID getSpaceIdForPost(UUID postId) {
                 return postRepository.findSpaceIdByPostId(postId);
+        }
+
+        @Transactional
+        public boolean editPost(EditPostRequest request, UUID userId, UUID postId) {
+                Post post = postRepository.findById(postId)
+                        .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                "Post not found with id: " + postId));
+                if (!post.getAuthorId().equals(userId)) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                "Only the post author can edit it");
+                }
+                post.setTitle(request.getTitle());
+                post.setBody(request.getBody());
+                postRepository.save(post);
+                return true;
+        }
+
+        @Transactional
+        public boolean deletePost(UUID postId, UUID userId) {
+                Post post = postRepository.findById(postId)
+                        .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                "Post not found with id: " + postId));
+                if (!post.getAuthorId().equals(userId)) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                "Only the post author can delete it");
+                }
+                answerRepository.deleteByPostId(postId);
+                postRepository.deleteById(postId);
+                return true;
         }
 
     // ─── US-015: Answer a question ────────────────────────────────────────────
@@ -215,6 +258,95 @@ public class PostService {
         return toPostResponse(post, author.getFullName(), answerCount);
         }
 
+
+        @Transactional
+        public List<AnswerResponse> getPostAnswers(UUID postId, UUID userId, int page, int size) {
+
+                if (!postRepository.existsById(postId)) {
+                        throw new ApiException(HttpStatus.NOT_FOUND,
+                                "Post not found with id: " + postId);
+                }
+
+                if (!userRepository.existsById(userId)) {
+                        throw new ApiException(HttpStatus.NOT_FOUND,
+                                "User not found with id: " + userId);
+                }
+                UUID spaceId = postRepository.findSpaceIdByPostId(postId);
+                boolean isMember = spaceMembershipRepository
+                        .existsBySpaceIdAndUserId(spaceId, userId);
+
+                if (!isMember) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                "You must be a member of this space to view answers");
+                }
+
+                Page<Answer> answers = answerRepository.findByPostIdOrderByIsAcceptedDescUpvoteCountDescCreatedAtAsc(postId, PageRequest.of(page, size));
+                return answers.stream()
+                        .map(answer -> toAnswerResponse(answer, answerRepository.findAuthorNameByAnswerId(answer.getId())))
+                        .toList();
+        }
+
+        @Transactional
+        public boolean editAnswer(EditAnswerRequest request, UUID userId, UUID answerId) {
+                Answer answer = answerRepository.findById(answerId)
+                        .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                "Answer not found with id: " + answerId));
+                if (!answer.getAuthorId().equals(userId)) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                "Only the answer author can edit it");
+                }
+                answer.setBody(request.getBody());
+                answerRepository.save(answer);
+                return true;
+        }
+
+        @Transactional
+        public boolean deleteAnswer(UUID answerId, UUID userId) {
+                Answer answer = answerRepository.findById(answerId)
+                        .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                "Answer not found with id: " + answerId));
+                if (!answer.getAuthorId().equals(userId)) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                "Only the answer author can delete it");
+                }
+                answerRepository.deleteById(answerId);
+                return true;
+        }
+
+
+        @Transactional
+        public List<AllPostsResponse> getAllPost(UUID userId, UUID spaceId, int page, int size) {
+
+                if (!spaceRepository.existsById(spaceId)) {
+                        throw new ApiException(HttpStatus.NOT_FOUND,
+                                "Space not found with id: " + spaceId);
+                }
+
+                if (!userRepository.existsById(userId)) {
+                        throw new ApiException(HttpStatus.NOT_FOUND,
+                                "User not found with id: " + userId);
+                }
+
+                boolean isMember = spaceMembershipRepository
+                        .existsBySpaceIdAndUserId(spaceId, userId);
+
+                if (!isMember) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                "You must be a member of this space to view posts");
+                }
+
+                PageRequest pageable = PageRequest.of(page, size);
+
+                Page<Post> postPage = postRepository
+                        .findBySpaceIdOrderByCreatedAtDesc(spaceId, pageable);
+
+                return postPage.getContent().stream()
+                        .map(post -> {
+                                return mapToAllPostsResponse(post);
+                        }).toList();
+        }
+
+
                 
     // ─── Mapping helpers ──────────────────────────────────────────────────────
 
@@ -254,6 +386,77 @@ public class PostService {
                 .isAccepted(answer.getIsAccepted())
                 .createdAt(answer.getCreatedAt())
                 .updatedAt(answer.getUpdatedAt())
+                .build();
+        }
+
+        public AllPostsResponse mapToAllPostsResponse(Post post) {
+
+        // 1. Resolve author
+        User author = userRepository.findById(post.getAuthorId())
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND, "USER_NOT_FOUND",
+                        "Author not found for post: " + post.getId()));
+
+        // 2. Resolve space
+        Space space = spaceRepository.findById(post.getSpaceId())
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND, "SPACE_NOT_FOUND",
+                        "Space not found for post: " + post.getId()));
+
+        // 3. Fetch top 3 answers — accepted first, then by upvote count (already sorted by repo)
+        List<AllPostsResponse.AnswerSummary> top3Answers =
+                answerRepository
+                        .findByPostIdOrderByIsAcceptedDescUpvoteCountDescCreatedAtAsc(
+                                post.getId(), PageRequest.of(0, 3))
+                        .getContent()
+                        .stream()
+                        .map(answer -> {
+                                User answerAuthor = userRepository.findById(answer.getAuthorId())
+                                        .orElseThrow(() -> new ApiException(
+                                                HttpStatus.NOT_FOUND, "USER_NOT_FOUND",
+                                                "Author not found for answer: " + answer.getId()));
+
+                                return AllPostsResponse.AnswerSummary.builder()
+                                        .answerId(answer.getId())
+                                        .authorId(answer.getAuthorId())
+                                        .authorName(answerAuthor.getFullName())
+                                        .authorAvatarUrl(answerAuthor.getImageUrl())
+                                        .body(answer.getBody())
+                                        .upvoteCount(answer.getUpvoteCount())
+                                        .isAccepted(answer.getIsAccepted())
+                                        .createdAt(answer.getCreatedAt()
+                                                .toInstant(ZoneOffset.UTC))
+                                        .build();
+                        })
+                        .toList();
+
+        // 4. Resolve answer count
+        int answerCount = answerRepository.countByPostId(post.getId());
+
+        // 5. Build and return the response
+        return AllPostsResponse.builder()
+                .postId(post.getId())
+                .title(post.getTitle())
+                .body(post.getBody())
+
+                .authorId(author.getId())
+                .authorName(author.getFullName())
+                .authorAvatarUrl(author.getImageUrl())
+
+                .spaceId(space.getId())
+                .spaceName(space.getName())
+
+                .goodQuestionCount(post.getGoodQuestionCount())
+                .answerCount(answerCount)
+                .viewCount(post.getViewCount())
+                .solved(post.getIsSolved())
+
+                .top3Answers(top3Answers)
+
+                .createdAt(post.getCreatedAt().toInstant(ZoneOffset.UTC))
+                .updatedAt(post.getUpdatedAt() != null
+                        ? post.getUpdatedAt().toInstant(ZoneOffset.UTC)
+                        : null)
                 .build();
         }
 }
