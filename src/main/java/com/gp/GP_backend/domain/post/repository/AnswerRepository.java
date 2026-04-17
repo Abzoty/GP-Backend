@@ -1,6 +1,9 @@
 package com.gp.GP_backend.domain.post.repository;
 
 import com.gp.GP_backend.domain.post.entity.Answer;
+
+import jakarta.transaction.Transactional;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -38,6 +41,8 @@ public interface AnswerRepository extends JpaRepository<Answer, UUID> {
     @Query("SELECT u.fullName FROM Answer a, User u WHERE a.id = :answerId AND a.authorId = u.id")
     String findAuthorNameByAnswerId(UUID answerId);
 
+    @Modifying
+    @Transactional
     @Query("DELETE FROM Answer a WHERE a.postId = :postId")
     void deleteByPostId(UUID postId);
 }

@@ -93,6 +93,7 @@ public class PostController {
 
     @PutMapping("/api/v1/spaces/posts/{postId}")
     @Operation(summary = "Edit an existing post")
+    // TODO: return the new post content in the response body
     public ResponseEntity<ApiResponse<Boolean>> editPost(
         @PathVariable UUID postId,
         @Valid @RequestBody EditPostRequest request,
@@ -213,6 +214,7 @@ public class PostController {
 
     @PutMapping("/api/v1/answers/{answerId}")
     @Operation(summary = "Edit an existing answer")
+    // TODO: return the new answer content in the response body 
     public ResponseEntity<ApiResponse<Boolean>> editAnswer(
             @PathVariable UUID answerId,
             @Valid @RequestBody EditAnswerRequest request,

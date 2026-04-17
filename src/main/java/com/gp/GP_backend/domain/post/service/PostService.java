@@ -147,8 +147,9 @@ public class PostService {
                                 "Post not found with id: " + postId));
                 if (!post.getAuthorId().equals(userId)) {
                         throw new ApiException(HttpStatus.FORBIDDEN,
-                                "Only the post author can delete it");
+                                        "Only the post author can delete it");
                 }
+
                 answerRepository.deleteByPostId(postId);
                 postRepository.deleteById(postId);
                 return true;
