@@ -8,25 +8,19 @@ import lombok.Data;
 import java.util.UUID;
 
 @Data
-public class CreateMaterialRequest {
+public class ShareLinkRequest {
 
-    @NotNull
+    @NotNull(message = "Space ID is required")
     private UUID spaceId;
 
-    @NotBlank
-    @Size(max = 255)
+    @NotBlank(message = "Title is required")
+    @Size(max = 255, message = "Title must not exceed 255 characters")
     private String title;
 
     @Size(max = 1000)
     private String description;
 
-    @NotBlank
-    @Size(max = 10, message = "Resource type must not exceed 10 characters")
-    private String resourceType;
-
-    @Size(max = 1024)
+    @NotBlank(message = "URL is required")
+    @Size(max = 1024, message = "URL must not exceed 1024 characters")
     private String url;
-
-    /** File size in KB; null for external links. */
-    private Integer fileSizeKb;
 }

@@ -1,18 +1,186 @@
 package com.gp.GP_backend.domain.material.controller;
 
+import com.gp.GP_backend.domain.material.dto.EditMaterialRequest;
+import com.gp.GP_backend.domain.material.dto.MaterialResponse;
+import com.gp.GP_backend.domain.material.dto.ShareLinkRequest;
+import com.gp.GP_backend.domain.material.entity.AcceptedFileType;
+import com.gp.GP_backend.domain.material.service.MaterialService;
+import com.gp.GP_backend.domain.user.entity.User;
+import com.gp.GP_backend.shared.exception.ApiException;
+import com.gp.GP_backend.shared.response.ApiResponse;
+import com.gp.GP_backend.shared.storage.FileStorageService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
-/**
- * REST controller for Material endpoints.
- *
- * TODO: Implement CRUD endpoints once MaterialService is complete.
- * All endpoints here are protected by JWT (configured in SecurityConfig).
- */
+import java.util.List;
+import java.util.UUID;
+
+
 @RestController
 @RequestMapping("/api/v1/materials")
 @RequiredArgsConstructor
+@Tag(name = "Materials", description = "File uploads, link sharing, bookmarks, and retrieval within spaces")
+@SecurityRequirement(name = "bearerAuth")
 public class MaterialController {
-    // TODO: inject MaterialService
+
+    private final MaterialService materialService;
+    private final FileStorageService fileStorageService;
+
+    // ─── Create: file upload ──────────────────────────────────────────────────
+
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload a file to a space")
+    public ResponseEntity<ApiResponse<MaterialResponse>> uploadFile(
+            @RequestParam UUID spaceId,
+            @RequestParam String title,
+            @RequestParam(required = false) String description,
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal User user) {
+
+        MaterialResponse response = materialService.uploadFile(spaceId, title, description, file, user);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("File uploaded successfully", response));
+    }
+
+    // ─── Create: share link ────────────────────────────────────────────────────
+
+    @PostMapping("/link")
+    @Operation(summary = "Share an external link in a space")
+    public ResponseEntity<ApiResponse<MaterialResponse>> shareLink(
+            @Valid @RequestBody ShareLinkRequest request,
+            @AuthenticationPrincipal User user) {
+
+        MaterialResponse response = materialService.shareLink(request, user);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Link shared successfully", response));
+    }
+
+    // ─── Download file ────────────────────────────────────────────────────────
+
+    @GetMapping("/{materialId}/download")
+    @Operation(summary = "Download a file material")
+    public ResponseEntity<Resource> downloadFile(
+            @PathVariable UUID materialId,
+            @AuthenticationPrincipal User user) {
+
+        MaterialResponse material = materialService.getMaterial(materialId, user);
+
+        if ("LINK".equals(material.getResourceType())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "This material is an external link and cannot be downloaded. Open the URL directly.");
+        }
+
+        Resource resource = fileStorageService.loadAsResource(material.getUrl());
+        String contentType = resolveContentType(material.getResourceType());
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + resource.getFilename() + "\"")
+                .body(resource);
+    }
+
+    // ─── Bookmark (add) ────────────────────────────────────────────────────────
+
+    @PostMapping("/{materialId}/bookmark")
+    @Operation(summary = "Bookmark a material")
+    public ResponseEntity<ApiResponse<Void>> bookmark(
+            @PathVariable UUID materialId,
+            @AuthenticationPrincipal User user) {
+
+        materialService.bookmark(materialId, user);
+        return ResponseEntity.ok(ApiResponse.ok("Material bookmarked successfully", null));
+    }
+
+    // ─── Bookmark (remove) ────────────────────────────────────────────────────
+
+    @DeleteMapping("/{materialId}/bookmark")
+    @Operation(summary = "Remove a bookmark from a material")
+    public ResponseEntity<ApiResponse<Void>> unbookmark(
+            @PathVariable UUID materialId,
+            @AuthenticationPrincipal User user) {
+
+        materialService.unbookmark(materialId, user);
+        return ResponseEntity.ok(ApiResponse.ok("Bookmark removed successfully", null));
+    }
+
+    // ─── Edit ─────────────────────────────────────────────────────────────────
+
+    @PatchMapping("/{materialId}")
+    @Operation(summary = "Edit a material's title and description")
+    public ResponseEntity<ApiResponse<MaterialResponse>> editMaterial(
+            @PathVariable UUID materialId,
+            @Valid @RequestBody EditMaterialRequest request,
+            @AuthenticationPrincipal User user) {
+
+        MaterialResponse response = materialService.editMaterial(materialId, request, user);
+        return ResponseEntity.ok(ApiResponse.ok("Material updated successfully", response));
+    }
+
+    // ─── Delete ───────────────────────────────────────────────────────────────
+
+    @DeleteMapping("/{materialId}")
+    @Operation(summary = "Delete a material")
+    public ResponseEntity<ApiResponse<Void>> deleteMaterial(
+            @PathVariable UUID materialId,
+            @AuthenticationPrincipal User user) {
+
+        materialService.deleteMaterial(materialId, user);
+        return ResponseEntity.ok(ApiResponse.ok("Material deleted successfully", null));
+    }
+
+    // ─── Getters ──────────────────────────────────────────────────────────────
+
+    @GetMapping("/{materialId}")
+    @Operation(summary = "Get a single material by ID")
+    public ResponseEntity<ApiResponse<MaterialResponse>> getMaterial(
+            @PathVariable UUID materialId,
+            @AuthenticationPrincipal User user) {
+
+        MaterialResponse response = materialService.getMaterial(materialId, user);
+        return ResponseEntity.ok(ApiResponse.ok("Material retrieved", response));
+    }
+
+    @GetMapping("/space/{spaceId}")
+    @Operation(summary = "Get all materials in a space")
+    public ResponseEntity<ApiResponse<List<MaterialResponse>>> getMaterialsBySpace(
+            @PathVariable UUID spaceId,
+            @AuthenticationPrincipal User user) {
+
+        List<MaterialResponse> materials = materialService.getMaterialsBySpace(spaceId, user);
+        return ResponseEntity.ok(ApiResponse.ok("Materials retrieved", materials));
+    }
+
+    @GetMapping("/space/{spaceId}/bookmarked")
+    @Operation(summary = "Get bookmarked materials in a space for the current user")
+    public ResponseEntity<ApiResponse<List<MaterialResponse>>> getBookmarkedMaterials(
+            @PathVariable UUID spaceId,
+            @AuthenticationPrincipal User user) {
+
+        List<MaterialResponse> materials = materialService.getBookmarkedMaterials(spaceId, user);
+        return ResponseEntity.ok(ApiResponse.ok("Bookmarked materials retrieved", materials));
+    }
+
+    // ─── Private helpers ──────────────────────────────────────────────────────
+
+    private String resolveContentType(String resourceType) {
+        if (resourceType == null)
+            return MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        try {
+            return AcceptedFileType.valueOf(resourceType).getMimeType();
+        } catch (IllegalArgumentException e) {
+            return MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        }
+    }
 }

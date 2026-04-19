@@ -5,7 +5,6 @@ import com.gp.GP_backend.domain.post.dto.CreatePostRequest;
 import com.gp.GP_backend.domain.post.dto.EditAnswerRequest;
 import com.gp.GP_backend.domain.post.dto.EditPostRequest;
 import com.gp.GP_backend.domain.post.dto.AllPostsResponse;
-import com.gp.GP_backend.domain.post.dto.AllPostsResponse.AnswerSummary;
 import com.gp.GP_backend.domain.post.dto.AnswerResponse;
 import com.gp.GP_backend.domain.post.dto.PostResponse;
 import com.gp.GP_backend.domain.post.entity.Answer;

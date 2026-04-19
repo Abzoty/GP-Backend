@@ -4,20 +4,12 @@ import com.gp.GP_backend.domain.space.entity.Space;
 import com.gp.GP_backend.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * A study resource (PDF, link, image, or video) shared inside a {@link Space}.
- *
- * <p>
- * {@code linkCount} is a denormalized counter tracking how many other users
- * have saved ("linked") this material to their personal collection.
- * It's incremented by
- * {@link com.gp.GP_backend.domain.material.service.MaterialService}
- * whenever a {@link MaterialLink} is created.
- */
+
 @Entity
 @Table(name = "materials")
 @Getter
@@ -46,18 +38,20 @@ public class Material {
     @Column(length = 1000)
     private String description;
 
-    /** PDF / LINK / IMAGE / VIDEO */
     @Column(name = "resource_type", length = 30)
     private String resourceType;
 
+    /**
+     * For file materials: the filename as stored on disk (UUID + extension).
+     * For link materials: the full external URL.
+     */
     @Column(length = 1024)
     private String url;
 
-    /** File size in kilobytes; null for external links. */
+    /** File size in kilobytes;  null for link materials. */
     @Column(name = "file_size_kb")
     private Integer fileSizeKb;
 
-    /** How many users have saved this material to their collection. */
     @Column(name = "link_count")
     @Builder.Default
     private Integer linkCount = 0;
@@ -65,4 +59,8 @@ public class Material {
     @Column(name = "created_at", updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 }

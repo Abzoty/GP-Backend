@@ -9,13 +9,14 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/** Read-only representation of a Material returned to the client. */
+
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class MaterialResponse {
+
     private UUID id;
     private UUID spaceId;
     private String spaceName;
@@ -23,9 +24,17 @@ public class MaterialResponse {
     private String uploadedByName;
     private String title;
     private String description;
+
+    // from enum ResourceType
     private String resourceType;
+    
     private String url;
+
+    /** File size in kilobytes; null for link materials. */
     private Integer fileSizeKb;
+
     private Integer linkCount;
+    private Boolean isBookmarked;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }
