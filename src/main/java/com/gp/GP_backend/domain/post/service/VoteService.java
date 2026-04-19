@@ -4,7 +4,6 @@ import com.gp.GP_backend.domain.post.repository.VoteRepository;
 import lombok.RequiredArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -19,8 +18,6 @@ import com.gp.GP_backend.domain.space.entity.Space;
 import com.gp.GP_backend.domain.space.repository.SpaceMembershipRepository;
 import com.gp.GP_backend.domain.space.repository.SpaceRepository;
 import com.gp.GP_backend.domain.user.entity.User;
-import com.gp.GP_backend.domain.user.repository.UserRepository;
-import com.gp.GP_backend.domain.user.service.GamificationService;
 import com.gp.GP_backend.shared.exception.ApiException;
 
 import jakarta.transaction.Transactional;
@@ -47,7 +44,6 @@ public class VoteService {
 
         private final VoteRepository voteRepository;
         private final PostRepository postRepository;
-        private final UserRepository userRepository;
         private final AnswerRepository answerRepository;
         private final SpaceRepository spaceRepository;
         private final SpaceMembershipRepository spaceMembershipRepository;
