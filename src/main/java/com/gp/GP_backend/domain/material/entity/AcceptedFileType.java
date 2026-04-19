@@ -6,20 +6,7 @@ import lombok.RequiredArgsConstructor;
 import java.util.Arrays;
 import java.util.Optional;
 
-/**
- * Enumerates every file type accepted for material uploads.
- *
- * <p>
- * <b>To add a new type:</b> add a constant with the correct MIME type and
- * extension.
- * <b>To remove one:</b> delete the constant.
- * No other class needs to be changed — the enum drives validation, storage, and
- * HTTP response headers automatically.
- *
- * <p>
- * The enum {@code name()} (e.g. {@code "PDF"}) is what gets persisted in
- * {@code Material.resourceType} for file-based materials.
- */
+
 @Getter
 @RequiredArgsConstructor
 public enum AcceptedFileType {
@@ -32,21 +19,11 @@ public enum AcceptedFileType {
 
     // ─── Add new accepted types above this line ────────────────────────────────
 
-    /**
-     * MIME type as reported by the browser in the multipart Content-Type header.
-     */
+
     private final String mimeType;
 
-    /** File extension including the leading dot (e.g. {@code ".pdf"}). */
     private final String extension;
 
-    /**
-     * Looks up an {@link AcceptedFileType} by MIME type, ignoring charset suffixes
-     * (e.g. {@code "text/plain; charset=UTF-8"} → {@code TXT}).
-     *
-     * @param mimeType raw Content-Type header value; may be null.
-     * @return the matching type, or empty if none matches.
-     */
     public static Optional<AcceptedFileType> fromMimeType(String mimeType) {
         if (mimeType == null)
             return Optional.empty();
@@ -56,15 +33,11 @@ public enum AcceptedFileType {
                 .findFirst();
     }
 
-    /** @return {@code true} if the given MIME type appears in the accepted list. */
     public static boolean isAccepted(String mimeType) {
         return fromMimeType(mimeType).isPresent();
     }
 
-    /**
-     * @return a human-readable comma-separated list of accepted MIME types,
-     *         suitable for error messages.
-     */
+    // human-readable list of accepted MIME types for error messages
     public static String acceptedMimeTypes() {
         return Arrays.stream(values())
                 .map(AcceptedFileType::getMimeType)

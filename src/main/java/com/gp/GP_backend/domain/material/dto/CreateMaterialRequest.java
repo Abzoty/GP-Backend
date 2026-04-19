@@ -2,13 +2,11 @@ package com.gp.GP_backend.domain.material.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.util.UUID;
 
-/** Payload for POST /api/v1/materials — shares a resource in a space. */
 @Data
 public class CreateMaterialRequest {
 
@@ -22,8 +20,8 @@ public class CreateMaterialRequest {
     @Size(max = 1000)
     private String description;
 
-    /** PDF / LINK / IMAGE / VIDEO */
-    @Pattern(regexp = "PDF|LINK|IMAGE|VIDEO")
+    @NotBlank
+    @Size(max = 10, message = "Resource type must not exceed 10 characters")
     private String resourceType;
 
     @Size(max = 1024)

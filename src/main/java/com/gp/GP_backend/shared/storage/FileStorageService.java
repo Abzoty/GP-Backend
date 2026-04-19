@@ -16,27 +16,7 @@ import java.net.MalformedURLException;
 import java.nio.file.*;
 import java.util.UUID;
 
-/**
- * Handles disk-based storage for uploaded material files.
- *
- * <p>
- * Files are written to the directory configured by
- * {@code app.storage.upload-dir}
- * (defaults to {@code uploads/} relative to the working directory).
- * The directory is created automatically on startup if it does not exist.
- *
- * <p>
- * <b>To change the maximum upload size:</b> update
- * {@link #MAX_FILE_SIZE_BYTES}.
- * Also keep {@code spring.servlet.multipart.max-file-size} in
- * {@code application-dev.properties} in sync — Spring's multipart limit is
- * checked
- * first (before the request reaches this service).
- *
- * <p>
- * <b>To add or remove accepted file types:</b> edit
- * {@link AcceptedFileType} only — no changes needed here.
- */
+
 @Service
 @Slf4j
 public class FileStorageService {
@@ -44,9 +24,9 @@ public class FileStorageService {
     // ─── Global size limit ────────────────────────────────────────────────────
 
     /**
-     * Maximum allowed upload size <strong>in bytes</strong>.
+     * Maximum allowed upload size in bytes.
      * Change this one constant to raise or lower the limit everywhere.
-     * Keep {@code spring.servlet.multipart.max-file-size} ≥ this value.
+     * Keep `spring.servlet.multipart.max-file-size` ≥ this value.
      */
     public static final long MAX_FILE_SIZE_BYTES = 10L * 1024 * 1024; // 10 MB
 
@@ -57,12 +37,6 @@ public class FileStorageService {
 
     private Path uploadDir;
 
-    /**
-     * Resolves the upload directory path and creates it (including any missing
-     * parent directories) on application startup.
-     *
-     * @throws IllegalStateException if the directory cannot be created.
-     */
     @PostConstruct
     public void init() {
         uploadDir = Paths.get(uploadDirPath).toAbsolutePath().normalize();
@@ -77,24 +51,6 @@ public class FileStorageService {
 
     // ─── Store ────────────────────────────────────────────────────────────────
 
-    /**
-     * Validates and persists a multipart file to disk.
-     *
-     * <p>
-     * Validation order:
-     * <ol>
-     * <li>File must not be empty.</li>
-     * <li>File size must not exceed {@link #MAX_FILE_SIZE_BYTES}.</li>
-     * <li>MIME type must appear in {@link AcceptedFileType}.</li>
-     * </ol>
-     *
-     * @param file the uploaded multipart file.
-     * @return the generated filename ({@code UUID + extension}) as stored on disk.
-     *         Persist this in {@code Material.url}.
-     * @throws ApiException 400 if the file is empty or too large.
-     * @throws ApiException 415 if the MIME type is not in the accepted list.
-     * @throws ApiException 500 if writing to disk fails.
-     */
     public String store(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Uploaded file must not be empty");
@@ -127,15 +83,6 @@ public class FileStorageService {
 
     // ─── Load ─────────────────────────────────────────────────────────────────
 
-    /**
-     * Loads a previously stored file as a Spring {@link Resource} for streaming
-     * to the client.
-     *
-     * @param filename the stored filename returned by {@link #store}.
-     * @return a readable resource pointing to the file on disk.
-     * @throws ApiException 404 if the file does not exist on disk.
-     * @throws ApiException 500 if the path cannot be resolved.
-     */
     public Resource loadAsResource(String filename) {
         try {
             // normalize() prevents path-traversal attacks (e.g. "../../etc/passwd")
@@ -154,15 +101,6 @@ public class FileStorageService {
 
     // ─── Delete ───────────────────────────────────────────────────────────────
 
-    /**
-     * Deletes a stored file from disk.
-     *
-     * <p>
-     * Silently succeeds if the file does not exist — this prevents a missing
-     * file from blocking the database record deletion that follows.
-     *
-     * @param filename the stored filename to remove; null/blank values are ignored.
-     */
     public void delete(String filename) {
         if (filename == null || filename.isBlank())
             return;

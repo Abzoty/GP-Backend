@@ -7,15 +7,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Records that a user has saved ("linked") a {@link Material} to their personal
- * collection.
- *
- * <p>
- * Creating a MaterialLink also increments {@code Material.linkCount} via
- * {@link com.gp.GP_backend.domain.material.service.MaterialService}.
- * Deleting it decrements the counter.
- */
+
 @Entity
 @Table(name = "material_links")
 @Getter

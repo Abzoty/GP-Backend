@@ -7,10 +7,6 @@ import lombok.Data;
 
 import java.util.UUID;
 
-/**
- * Request body for {@code POST /api/v1/materials/link} — shares an external
- * URL (e.g. a YouTube lecture or an online document) inside a space.
- */
 @Data
 public class ShareLinkRequest {
 
