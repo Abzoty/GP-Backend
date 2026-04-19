@@ -1,43 +1,40 @@
 package com.gp.GP_backend.domain.post.dto;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.Data;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
-/** Read-only representation of a Post returned to the client. */
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
+/**
+ * Read model returned to the client for a single post.
+ *
+ * <p>{@code answerCount} is populated from a COUNT query in the service
+ * rather than a JPA collection, avoiding the N+1 trap on feed pages.
+ *
+ * <p>{@code authorName} is resolved by the service from {@code UserService}
+ * so the client never needs a second request.
+ */
+@Data
 @Builder
 public class PostResponse {
+
     private UUID id;
     private UUID spaceId;
-    private String spaceName;
+
     private UUID authorId;
     private String authorName;
-    private String authorImageUrl;
+
     private String title;
     private String body;
-    private String postType;
+
     private Boolean isSolved;
     private UUID acceptedAnswerId;
+
     private Integer viewCount;
     private Integer goodQuestionCount;
-    private String tags;
+    private Integer answerCount;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    /** Total answer count (always populated). */
-    private Integer answerCount;
-    /**
-     * Full answer list — only populated on the post detail endpoint, null on list
-     * endpoints.
-     */
-    private List<AnswerResponse> answers;
 }

@@ -2,21 +2,9 @@ package com.gp.GP_backend.domain.post.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.Data;
 
-/**
- * Request body for US-014 — Create a question post in a space.
- *
- * <p>Validation rules from the acceptance criteria:
- * <ul>
- *   <li>Title: 10–300 characters</li>
- *   <li>Body: minimum 30 characters</li>
- *   <li>Tags: max 5, each tag max 30 characters</li>
- * </ul>
- */
-@Data
-public class CreatePostRequest {
-
+public class EditPostRequest {
+    
     @NotBlank(message = "Title is required")
     @Size(min = 10, max = 300, message = "Title must be between 10 and 300 characters")
     private String title;
@@ -24,4 +12,12 @@ public class CreatePostRequest {
     @NotBlank(message = "Body is required")
     @Size(min = 30, message = "Body must be at least 30 characters")
     private String body;
+
+    public String getTitle() {
+        return title;
+    }
+
+    public String getBody() {
+        return body;
+    }
 }

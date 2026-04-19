@@ -4,8 +4,10 @@ import com.gp.GP_backend.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 
+// import java.lang.annotation.Target;
 import java.time.LocalDateTime;
 import java.util.UUID;
+
 
 /**
  * Records a single vote cast by a user on a post or answer.
@@ -47,12 +49,15 @@ public class Vote {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    
+
     /**
      * Discriminator for {@code targetId}.
      * Values: {@code ANSWER}, {@code QUESTION}.
      */
     @Column(name = "target_type", nullable = false, length = 20)
-    private String targetType;
+    @Enumerated(EnumType.STRING)
+    private TargetType targetType;
 
     /**
      * UUID of the target entity (Answer.id or Post.id).
@@ -63,7 +68,8 @@ public class Vote {
 
     /** UPVOTE or GOOD_QUESTION — see class-level Javadoc. */
     @Column(name = "vote_type", nullable = false, length = 20)
-    private String voteType;
+    @Enumerated(EnumType.STRING)
+    private VoteType voteType;
 
     @Column(name = "created_at", updatable = false)
     @Builder.Default

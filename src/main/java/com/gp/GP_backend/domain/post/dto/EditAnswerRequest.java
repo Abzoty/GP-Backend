@@ -2,15 +2,14 @@ package com.gp.GP_backend.domain.post.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.Data;
 
-/**
- * Request body for US-015 — Answer a question in a space.
- */
-@Data
-public class CreateAnswerRequest {
-
+public class EditAnswerRequest {
     @NotBlank(message = "Answer body is required")
     @Size(min = 10, message = "Answer must be at least 10 characters")
-    private String body;
+    String body;
+
+
+    public String getBody() {
+        return body;
+    }
 }

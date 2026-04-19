@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+
 import java.util.stream.Collectors;
 
 /**
@@ -70,6 +71,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.fail("You do not have permission to perform this action"));
     }
+
+
+    /**
+     * Handles Spring's {@link org.springframework.web.server.ResponseStatusException}
+     * — preserves the status code and reason phrase the caller intended.
+     */
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ApiResponse<Void>> handleResponseStatus(
+            org.springframework.web.server.ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(ApiResponse.fail(ex.getReason()));
+    }
+
 
     /**
      * Catch-all handler for any unhandled exception.

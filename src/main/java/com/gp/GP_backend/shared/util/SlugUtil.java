@@ -37,7 +37,7 @@ public final class SlugUtil {
      * <p>
      * Steps:
      * <ol>
-     * <li>Normalise Unicode (NFD) to separate base characters from diacritics.</li>
+     * <li>Normalize Unicode (NFD) to separate base characters from diacritics.</li>
      * <li>Strip diacritics and non-ASCII characters.</li>
      * <li>Lowercase.</li>
      * <li>Replace whitespace/underscores with hyphens.</li>

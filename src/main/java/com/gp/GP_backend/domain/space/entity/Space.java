@@ -8,15 +8,11 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * A Space is a community/study group centred around a course or topic.
- *
- * <p>
- * Users join spaces to ask questions, share materials, and collaborate.
- * Each space has a URL-friendly {@code slug} generated from its name.
- *
- * <p>
- * Spaces can be tied to a specific {@code courseCode} so that the course
- * recommendation engine can suggest relevant spaces to new students.
+ * The {@code category} field is an enum ({@link SpaceCategory}) that also
+ * drives the duplicate-detection logic during creation:
+ * {@link SpaceCategory#COLLEGE_COURSE} spaces are matched by
+ * {@code courseCode};
+ * all other categories use text-similarity on {@code name + description}.
  */
 @Entity
 @Table(name = "spaces")
@@ -45,31 +41,21 @@ public class Space {
     @Column(length = 1000)
     private String description;
 
-    /** Broad category (e.g. "Computer Science", "Engineering"). */
-    @Column(length = 80)
-    private String category;
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private SpaceCategory category;
 
-    /**
-     * Optional course code that links this space to a specific course (e.g.
-     * "CS301").
-     */
     @Column(name = "course_code", length = 30)
     private String courseCode;
 
-    /** The user who created this space; null if created by the system. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private User createdBy;
 
-    /** Inactive spaces are hidden from search but data is preserved. */
     @Column(name = "is_active")
     @Builder.Default
     private Boolean isActive = true;
 
-    /**
-     * Denormalized count — incremented/decremented by SpaceService for fast
-     * listing.
-     */
     @Column(name = "member_count")
     @Builder.Default
     private Integer memberCount = 0;
