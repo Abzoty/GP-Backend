@@ -7,7 +7,9 @@ import com.gp.GP_backend.domain.user.repository.UserRepository;
 import com.gp.GP_backend.shared.exception.ApiException;
 import com.gp.GP_backend.shared.util.EmailService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -26,6 +28,7 @@ import java.util.UUID;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserService {
 
     private final UserRepository userRepository;
@@ -55,6 +58,9 @@ public class UserService {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new ApiException(HttpStatus.CONFLICT, "Email is already registered");
         }
+        if (request.getStudentId() != null && userRepository.existsByStudentId(request.getStudentId())) {
+            throw new ApiException(HttpStatus.CONFLICT, "Student ID is already registered");
+        }
 
         // Map all matching fields; passwordHash is skipped (configured in
         // ModelMapperConfig)
@@ -63,10 +69,20 @@ public class UserService {
         // Encode the raw password — never store plain text
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
 
-        User saved = userRepository.save(user);
+        User saved;
+        try {
+            saved = userRepository.save(user);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Email or Student ID is already registered");
+        }
 
         // Fire-and-forget email; failure is logged but does not fail the request
-        emailService.sendWelcomeEmail(saved.getEmail(), saved.getFullName());
+        try {
+            emailService.sendWelcomeEmail(saved.getEmail(), saved.getFullName());
+        } catch (Exception ex) {
+            log.warn("Welcome email failed for user {}", saved.getId(), ex);
+        }
 
         return saved;
     }

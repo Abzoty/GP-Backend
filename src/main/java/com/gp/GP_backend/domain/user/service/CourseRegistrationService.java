@@ -8,6 +8,7 @@ import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.domain.user.repository.CourseRegisteredRepository;
 import com.gp.GP_backend.shared.exception.ApiException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,7 +60,12 @@ public class CourseRegistrationService {
                 .isCurrent(true) // active enrollment by default
                 .build();
 
-        return toResponse(courseRegisteredRepository.save(registration));
+        try {
+            return toResponse(courseRegisteredRepository.save(registration));
+        } catch (DataIntegrityViolationException ex) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Course '" + request.getCourseCode() + "' is already registered for this period");
+        }
     }
 
     /**
@@ -160,6 +166,7 @@ public class CourseRegistrationService {
                 .semester(entity.getSemester())
                 .academicYear(entity.getAcademicYear())
                 .grade(entity.getGrade())
+                .result(entity.getResult())
                 .isCurrent(entity.getIsCurrent())
                 .build();
     }

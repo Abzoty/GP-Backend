@@ -70,7 +70,7 @@ public class CourseRegistrationController {
 
     /**
      * Permanently removes a course registration.
-     * Returns {@code 204 NO CONTENT} on success.
+     * Returns {@code 200 OK} on success.
      */
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteRegistration(
@@ -78,8 +78,7 @@ public class CourseRegistrationController {
             @AuthenticationPrincipal User currentUser) {
 
         courseRegistrationService.deleteRegistration(id, currentUser);
-        return ResponseEntity.status(HttpStatus.NO_CONTENT)
-                .body(ApiResponse.ok("Course registration removed", null));
+        return ResponseEntity.ok(ApiResponse.ok("Course registration removed", null));
     }
 
     /**

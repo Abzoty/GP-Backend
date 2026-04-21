@@ -23,7 +23,10 @@ public class UpdateProfileRequest {
     @Max(10)
     private Integer currentSemester;
 
+    @Size(max = 100)
     private String department;
+
+    @Size(max = 512)
     private String imageUrl;
 
     @Size(max = 500)

@@ -13,6 +13,7 @@ import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.shared.exception.ApiException;
 import com.gp.GP_backend.shared.util.SlugUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -136,7 +137,12 @@ public class SpaceService {
                 .memberCount(1) // creator is the first member
                 .build();
 
-        space = spaceRepository.save(space);
+            try {
+                space = spaceRepository.save(space);
+            } catch (DataIntegrityViolationException ex) {
+                throw new ApiException(HttpStatus.CONFLICT,
+                    "A space named '" + request.getName() + "' already exists");
+            }
 
         // Automatically enrol the creator as ADMIN
         SpaceMembership adminMembership = SpaceMembership.builder()
@@ -144,7 +150,12 @@ public class SpaceService {
                 .user(creator)
                 .role(ROLE_ADMIN)
                 .build();
-        membershipRepository.save(adminMembership);
+        try {
+            membershipRepository.save(adminMembership);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "A space named '" + request.getName() + "' already exists");
+        }
 
         return toResponse(space);
     }
@@ -174,7 +185,11 @@ public class SpaceService {
                 .user(user)
                 .role(ROLE_MEMBER)
                 .build();
-        membership = membershipRepository.save(membership);
+        try {
+            membership = membershipRepository.save(membership);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ApiException(HttpStatus.CONFLICT, "You are already a member of this space");
+        }
 
         space.setMemberCount(space.getMemberCount() + 1);
         spaceRepository.save(space);
@@ -244,10 +259,15 @@ public class SpaceService {
      */
     @Transactional
     public SpaceResponse updateSpace(UUID spaceId, UpdateSpaceRequest request, User requester) {
+
         Space space = requireSpace(spaceId);
         requireAdminRole(spaceId, requester);
 
         if (request.getName() != null) {
+            if (spaceRepository.existsByName(request.getName())) {
+                throw new ApiException(HttpStatus.CONFLICT,
+                        "A space named '" + request.getName() + "' already exists");
+            }
             space.setName(request.getName());
             String newSlug = generateUniqueSlug(request.getName(), spaceId);
             space.setSlug(newSlug);
@@ -257,7 +277,12 @@ public class SpaceService {
         Optional.ofNullable(request.getCategory()).ifPresent(space::setCategory);
         Optional.ofNullable(request.getCourseCode()).ifPresent(space::setCourseCode);
 
-        return toResponse(spaceRepository.save(space));
+        try {
+            return toResponse(spaceRepository.save(space));
+        } catch (DataIntegrityViolationException ex) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "A space with the provided name or slug already exists");
+        }
     }
 
     // ─── Grant Admin ──────────────────────────────────────────────────────────
@@ -346,16 +371,16 @@ public class SpaceService {
         return membershipRepository.existsBySpaceIdAndUserId(spaceId, userId);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public SpaceResponse getSpaceById(UUID spaceId, UUID userId) {
-        if (isMemberInSpace(spaceId, userId)){
+        if (isMemberInSpace(spaceId, userId)) {
             Space space = requireSpace(spaceId);
             return toResponse(space);
         }
-        return null;
+        throw new ApiException(HttpStatus.FORBIDDEN, "You are not a member of this space");
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<SpaceResponse> getSpacesByUserId(UUID userId) {
         List<SpaceMembership> memberships = membershipRepository.findByUserId(userId);
         return memberships.stream()
@@ -363,7 +388,7 @@ public class SpaceService {
                 .toList();
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<SpaceResponse> getAllSpaces() {
         List<Space> spaces = spaceRepository.findAllActiveSpaces();
         return spaces.stream()
