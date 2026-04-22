@@ -8,6 +8,7 @@ import com.gp.GP_backend.domain.material.service.MaterialService;
 import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.shared.exception.ApiException;
 import com.gp.GP_backend.shared.response.ApiResponse;
+import com.gp.GP_backend.shared.response.PagedResponse;
 import com.gp.GP_backend.shared.storage.FileStorageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -160,6 +161,27 @@ public class MaterialController {
 
         List<MaterialResponse> materials = materialService.getMaterialsBySpace(spaceId, user);
         return ResponseEntity.ok(ApiResponse.ok("Materials retrieved", materials));
+    }
+
+    @GetMapping("/space/{spaceId}/paged")
+    @Operation(summary = "Get paged materials in a space")
+    public ResponseEntity<ApiResponse<PagedResponse<MaterialResponse>>> getMaterialsBySpacePaged(
+            @PathVariable UUID spaceId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal User user) {
+
+        if (page < 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Page must be >= 0");
+        }
+        if (size <= 0 || size > 100) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Size must be between 1 and 100");
+        }
+
+        PagedResponse<MaterialResponse> data = PagedResponse.of(
+                materialService.getMaterialsBySpacePaged(spaceId, user, page, size));
+
+        return ResponseEntity.ok(ApiResponse.ok("Materials retrieved", data));
     }
 
     @GetMapping("/space/{spaceId}/bookmarked")

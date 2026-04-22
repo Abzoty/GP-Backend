@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.UUID;
 
 public interface AnswerRepository extends JpaRepository<Answer, UUID> {
@@ -38,8 +39,8 @@ public interface AnswerRepository extends JpaRepository<Answer, UUID> {
     @Query("SELECT COUNT(a) FROM Answer a WHERE a.postId = :postId")
     int getAnswerCountByPostId(UUID postId);
 
-    @Query("SELECT u.fullName FROM Answer a, User u WHERE a.id = :answerId AND a.authorId = u.id")
-    String findAuthorNameByAnswerId(UUID answerId);
+    @Query("SELECT a.postId, COUNT(a) FROM Answer a WHERE a.postId IN :postIds GROUP BY a.postId")
+    List<Object[]> countByPostIds(@Param("postIds") List<UUID> postIds);
 
     @Modifying
     @Transactional

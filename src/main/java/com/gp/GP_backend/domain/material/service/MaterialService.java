@@ -16,13 +16,18 @@ import com.gp.GP_backend.shared.exception.ApiException;
 import com.gp.GP_backend.shared.storage.FileStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 
@@ -107,7 +112,11 @@ public class MaterialService {
                 .material(material)
                 .user(user)
                 .build();
-        materialLinkRepository.save(link);
+        try {
+            materialLinkRepository.save(link);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ApiException(HttpStatus.CONFLICT, "You have already bookmarked this material");
+        }
 
         // Increment the denormalized bookmark counter
         material.setLinkCount(material.getLinkCount() + 1);
@@ -198,13 +207,31 @@ public class MaterialService {
     @Transactional(readOnly = true)
     public List<MaterialResponse> getMaterialsBySpace(UUID spaceId, User user) {
         requireMemberSpace(spaceId, user.getId());
-        UUID userId = user.getId();
+        Set<UUID> bookmarkedMaterialIds = new HashSet<>(
+            materialLinkRepository.findByUserIdAndSpaceId(user.getId(), spaceId)
+                .stream()
+                .map(link -> link.getMaterial().getId())
+                .toList());
+
         return materialRepository.findBySpaceIdOrderByCreatedAtDesc(spaceId)
                 .stream()
-                .map(m -> toResponse(m,
-                        materialLinkRepository.existsByMaterialIdAndUserId(m.getId(), userId)))
+            .map(m -> toResponse(m, bookmarkedMaterialIds.contains(m.getId())))
                 .toList();
     }
+
+        @Transactional(readOnly = true)
+        public Page<MaterialResponse> getMaterialsBySpacePaged(UUID spaceId, User user, int page, int size) {
+        requireMemberSpace(spaceId, user.getId());
+
+        Set<UUID> bookmarkedMaterialIds = new HashSet<>(
+            materialLinkRepository.findByUserIdAndSpaceId(user.getId(), spaceId)
+                .stream()
+                .map(link -> link.getMaterial().getId())
+                .toList());
+
+        return materialRepository.findBySpaceIdOrderByCreatedAtDesc(spaceId, PageRequest.of(page, size))
+            .map(m -> toResponse(m, bookmarkedMaterialIds.contains(m.getId())));
+        }
 
     // Returns only the materials bookmarked by the requesting user in a specific space.
     @Transactional(readOnly = true)

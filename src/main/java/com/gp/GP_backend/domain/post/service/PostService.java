@@ -32,8 +32,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Business logic for Posts and Answers.
@@ -298,9 +304,22 @@ public class PostService {
 
                 Page<Answer> answers = answerRepository.findByPostIdOrderByIsAcceptedDescUpvoteCountDescCreatedAtAsc(
                                 postId, PageRequest.of(page, size));
+
+                Set<UUID> answerAuthorIds = answers.getContent().stream()
+                                .map(Answer::getAuthorId)
+                                .collect(Collectors.toSet());
+                Map<UUID, User> answerAuthors = userRepository.findAllById(answerAuthorIds).stream()
+                                .collect(Collectors.toMap(User::getId, u -> u));
+
                 return answers.stream()
-                                .map(answer -> toAnswerResponse(answer,
-                                                answerRepository.findAuthorNameByAnswerId(answer.getId())))
+                                .map(answer -> {
+                                        User author = answerAuthors.get(answer.getAuthorId());
+                                        if (author == null) {
+                                                throw new ApiException(HttpStatus.NOT_FOUND,
+                                                                "User not found with id: " + answer.getAuthorId());
+                                        }
+                                        return toAnswerResponse(answer, author.getFullName());
+                                })
                                 .toList();
         }
 
@@ -361,10 +380,28 @@ public class PostService {
                 Page<Post> postPage = postRepository
                                 .findBySpaceIdOrderByCreatedAtDesc(spaceId, pageable);
 
-                return postPage.getContent().stream()
-                                .map(post -> {
-                                        return mapToAllPostsResponse(post);
-                                }).toList();
+                List<Post> posts = postPage.getContent();
+                if (posts.isEmpty()) {
+                        return List.of();
+                }
+
+                Set<UUID> postAuthorIds = posts.stream().map(Post::getAuthorId).collect(Collectors.toSet());
+                Set<UUID> postSpaceIds = posts.stream().map(Post::getSpaceId).collect(Collectors.toSet());
+                List<UUID> postIds = posts.stream().map(Post::getId).toList();
+
+                Map<UUID, User> postAuthors = userRepository.findAllById(postAuthorIds).stream()
+                                .collect(Collectors.toMap(User::getId, u -> u));
+                Map<UUID, Space> postSpaces = spaceRepository.findAllById(postSpaceIds).stream()
+                                .collect(Collectors.toMap(Space::getId, s -> s));
+                Map<UUID, Integer> answerCountsByPostId = mapAnswerCountsByPostId(postIds);
+
+                return posts.stream()
+                                .map(post -> mapToAllPostsResponse(
+                                                post,
+                                                postAuthors.get(post.getAuthorId()),
+                                                postSpaces.get(post.getSpaceId()),
+                                                answerCountsByPostId.getOrDefault(post.getId(), 0)))
+                                .toList();
         }
 
         // ─── Mapping helpers ──────────────────────────────────────────────────────
@@ -411,50 +448,34 @@ public class PostService {
 
         public AllPostsResponse mapToAllPostsResponse(Post post) {
 
-                // 1. Resolve author
                 User author = userRepository.findById(post.getAuthorId())
                                 .orElseThrow(() -> new ApiException(
                                                 HttpStatus.NOT_FOUND, "USER_NOT_FOUND",
                                                 "Author not found for post: " + post.getId()));
 
-                // 2. Resolve space
                 Space space = spaceRepository.findById(post.getSpaceId())
                                 .orElseThrow(() -> new ApiException(
                                                 HttpStatus.NOT_FOUND, "SPACE_NOT_FOUND",
                                                 "Space not found for post: " + post.getId()));
 
-                // 3. Fetch top 3 answers — accepted first, then by upvote count (already sorted
-                // by repo)
-                List<AllPostsResponse.AnswerSummary> top3Answers = answerRepository
-                                .findByPostIdOrderByIsAcceptedDescUpvoteCountDescCreatedAtAsc(
-                                                post.getId(), PageRequest.of(0, 3))
-                                .getContent()
-                                .stream()
-                                .map(answer -> {
-                                        User answerAuthor = userRepository.findById(answer.getAuthorId())
-                                                        .orElseThrow(() -> new ApiException(
-                                                                        HttpStatus.NOT_FOUND, "USER_NOT_FOUND",
-                                                                        "Author not found for answer: "
-                                                                                        + answer.getId()));
-
-                                        return AllPostsResponse.AnswerSummary.builder()
-                                                        .answerId(answer.getId())
-                                                        .authorId(answer.getAuthorId())
-                                                        .authorName(answerAuthor.getFullName())
-                                                        .authorAvatarUrl(answerAuthor.getImageUrl())
-                                                        .body(answer.getBody())
-                                                        .upvoteCount(answer.getUpvoteCount())
-                                                        .isAccepted(answer.getIsAccepted())
-                                                        .createdAt(answer.getCreatedAt()
-                                                                        .toInstant(ZoneOffset.UTC))
-                                                        .build();
-                                })
-                                .toList();
-
-                // 4. Resolve answer count
                 int answerCount = answerRepository.countByPostId(post.getId());
 
-                // 5. Build and return the response
+                return mapToAllPostsResponse(post, author, space, answerCount);
+        }
+
+        private AllPostsResponse mapToAllPostsResponse(Post post, User author, Space space, int answerCount) {
+
+                if (author == null) {
+                        throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND",
+                                        "Author not found for post: " + post.getId());
+                }
+                if (space == null) {
+                        throw new ApiException(HttpStatus.NOT_FOUND, "SPACE_NOT_FOUND",
+                                        "Space not found for post: " + post.getId());
+                }
+
+                List<AllPostsResponse.AnswerSummary> top3Answers = buildTop3Answers(post.getId());
+
                 return AllPostsResponse.builder()
                                 .postId(post.getId())
                                 .title(post.getTitle())
@@ -479,5 +500,55 @@ public class PostService {
                                                 ? post.getUpdatedAt().toInstant(ZoneOffset.UTC)
                                                 : null)
                                 .build();
+        }
+
+        private List<AllPostsResponse.AnswerSummary> buildTop3Answers(UUID postId) {
+                List<Answer> topAnswers = answerRepository
+                                .findByPostIdOrderByIsAcceptedDescUpvoteCountDescCreatedAtAsc(
+                                                postId, PageRequest.of(0, 3))
+                                .getContent();
+
+                if (topAnswers.isEmpty()) {
+                        return List.of();
+                }
+
+                Set<UUID> answerAuthorIds = topAnswers.stream()
+                                .map(Answer::getAuthorId)
+                                .collect(Collectors.toCollection(HashSet::new));
+                Map<UUID, User> answerAuthors = userRepository.findAllById(answerAuthorIds).stream()
+                                .collect(Collectors.toMap(User::getId, u -> u));
+
+                return topAnswers.stream()
+                                .map(answer -> {
+                                        User answerAuthor = answerAuthors.get(answer.getAuthorId());
+                                        if (answerAuthor == null) {
+                                                throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND",
+                                                                "Author not found for answer: " + answer.getId());
+                                        }
+
+                                        return AllPostsResponse.AnswerSummary.builder()
+                                                        .answerId(answer.getId())
+                                                        .authorId(answer.getAuthorId())
+                                                        .authorName(answerAuthor.getFullName())
+                                                        .authorAvatarUrl(answerAuthor.getImageUrl())
+                                                        .body(answer.getBody())
+                                                        .upvoteCount(answer.getUpvoteCount())
+                                                        .isAccepted(answer.getIsAccepted())
+                                                        .createdAt(answer.getCreatedAt().toInstant(ZoneOffset.UTC))
+                                                        .build();
+                                })
+                                .toList();
+        }
+
+        private Map<UUID, Integer> mapAnswerCountsByPostId(List<UUID> postIds) {
+                if (postIds.isEmpty()) {
+                        return Collections.emptyMap();
+                }
+
+                Map<UUID, Integer> answerCounts = new HashMap<>();
+                for (Object[] row : answerRepository.countByPostIds(postIds)) {
+                        answerCounts.put((UUID) row[0], ((Long) row[1]).intValue());
+                }
+                return answerCounts;
         }
 }

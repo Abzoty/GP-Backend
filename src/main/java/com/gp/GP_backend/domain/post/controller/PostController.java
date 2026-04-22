@@ -77,7 +77,9 @@ public class PostController {
     }
 
 
-    @PostMapping("/api/v1/spaces/posts/{postId}")
+    @RequestMapping(
+        value = { "/api/v1/spaces/posts/{postId}", "/api/v1/posts/{postId}/votes/good-question" },
+        method = { RequestMethod.POST, RequestMethod.PATCH })
     @Operation(summary = "mark post as good question (US-017)")
     public ResponseEntity<ApiResponse<?>> goodQuestionPost(
             @PathVariable UUID postId,
@@ -119,7 +121,9 @@ public class PostController {
     }
 
 
-    @PostMapping("/api/v1/spaces/posts/{postId}/answers/{answerId}")
+    @RequestMapping(
+        value = { "/api/v1/spaces/posts/{postId}/answers/{answerId}", "/api/v1/posts/{postId}/accepted-answer/{answerId}" },
+        method = { RequestMethod.POST, RequestMethod.PATCH })
     @Operation(summary = "mark post as solved (US-018)")
     public ResponseEntity<ApiResponse<?>> markPostAsSolved(
             @PathVariable UUID postId,
@@ -134,7 +138,9 @@ public class PostController {
                 .body(ApiResponse.ok("Post marked as solved", null));
     }
 
-    @PostMapping("/api/v1/spaces/posts/answers/{answerId}")
+    @RequestMapping(
+        value = { "/api/v1/spaces/posts/answers/{answerId}", "/api/v1/answers/{answerId}/votes/upvote" },
+        method = { RequestMethod.POST, RequestMethod.PATCH })
     @Operation(summary = "upvote answer (US-016)")
     public ResponseEntity<ApiResponse<?>> upvoteAnswer(
             @PathVariable UUID answerId,
@@ -161,7 +167,7 @@ public class PostController {
         UUID spaceId = postService.getSpaceIdForPost(postId);
         boolean isMember = spaceService.isMemberInSpace(spaceId, user.getId());
         if (!isMember) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "Post not found");
+            throw new ApiException(HttpStatus.FORBIDDEN, "You must be a member of this space to view this post");
         }
         PostResponse post = postService.getPost(postId);
         return ResponseEntity.ok(ApiResponse.ok("Post retrieved", post));
@@ -173,6 +179,7 @@ public class PostController {
     public ResponseEntity<ApiResponse<List<AnswerResponse>>> getPost(@PathVariable UUID postId, @AuthenticationPrincipal User user,
         @PathVariable int page, @PathVariable int size
     ) {
+        validatePaging(page, size);
         return ResponseEntity.ok(ApiResponse.ok("Post Answers retrieved", postService.getPostAnswers(postId, user.getId(), page, size)));
     }
 
@@ -181,6 +188,7 @@ public class PostController {
     @Operation(summary = "Get all posts of space ordered by creation date")
     public ResponseEntity<ApiResponse<List<AllPostsResponse>>> allPosts(@PathVariable UUID spaceId, 
         @AuthenticationPrincipal User user, @PathVariable int page, @PathVariable int size) {
+        validatePaging(page, size);
         List<AllPostsResponse> posts = postService.getAllPost(user.getId(), spaceId, page, size);
         return ResponseEntity.ok(ApiResponse.ok("Posts retrieved", posts));
     }
@@ -238,6 +246,15 @@ public class PostController {
         return ResponseEntity
                 .status(HttpStatus.OK)
                 .body(ApiResponse.ok("Answer deleted successfully", isDeleted));
+    }
+
+    private void validatePaging(int page, int size) {
+        if (page < 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Page must be >= 0");
+        }
+        if (size <= 0 || size > 100) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Size must be between 1 and 100");
+        }
     }
 
 }
