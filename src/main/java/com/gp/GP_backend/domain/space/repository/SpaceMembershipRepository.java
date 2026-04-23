@@ -34,4 +34,6 @@ public interface SpaceMembershipRepository extends JpaRepository<SpaceMembership
     boolean existsBySpaceIdAndUserId(UUID spaceId, UUID userId);
 
     List<SpaceMembership> findByUserId(UUID userId);
+
+    List<SpaceMembership> findBySpaceIdWithUsers(UUID spaceId);
 }
