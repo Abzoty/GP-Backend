@@ -311,7 +311,7 @@ public class GamificationService {
         }
 
         // Load all members with their User associations in one query
-        List<SpaceMembership> memberships = spaceMembershipRepository.findBySpaceIdWithUsers(spaceId);
+        List<SpaceMembership> memberships = spaceMembershipRepository.findBySpace_Id(spaceId);
 
         List<UUID> memberIds = memberships.stream()
                 .map(m -> m.getUser().getId())

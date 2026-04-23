@@ -1,12 +1,13 @@
 package com.gp.GP_backend.domain.space.repository;
 
 import com.gp.GP_backend.domain.space.entity.SpaceMembership;
+
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-
 
 public interface SpaceMembershipRepository extends JpaRepository<SpaceMembership, UUID> {
 
@@ -35,5 +36,6 @@ public interface SpaceMembershipRepository extends JpaRepository<SpaceMembership
 
     List<SpaceMembership> findByUserId(UUID userId);
 
-    List<SpaceMembership> findBySpaceIdWithUsers(UUID spaceId);
+    @EntityGraph(attributePaths = { "user" })
+    List<SpaceMembership> findBySpace_Id(UUID spaceId);
 }
