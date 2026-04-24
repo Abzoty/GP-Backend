@@ -16,7 +16,12 @@ import java.util.UUID;
 public interface NotificationRepository extends JpaRepository<Notification, UUID> {
 
     /** All notifications for a user, newest first, paginated. */
-    Page<Notification> findByRecipientIdOrderByCreatedAtDesc(UUID recipientId, Pageable pageable);
+    @Query("SELECT n FROM Notification n " +
+        "LEFT JOIN FETCH n.sender " +
+        "LEFT JOIN FETCH n.recipient " +
+        "WHERE n.recipient.id = :userId " +
+        "ORDER BY n.createdAt DESC")
+    Page<Notification> findByRecipientIdOrderByCreatedAtDesc(@Param("userId") UUID recipientId, Pageable pageable);
 
     /** Count of unread notifications — displayed as a badge in the UI. */
     long countByRecipientIdAndIsReadFalse(UUID recipientId);
@@ -27,4 +32,11 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     @Modifying
     @Query("UPDATE Notification n SET n.isRead = true WHERE n.recipient.id = :userId AND n.isRead = false")
     void markAllAsReadForUser(@Param("userId") UUID userId);
+
+    /**
+     * Marks a specific notification as read.
+     */
+    @Modifying
+    @Query("UPDATE Notification n SET n.isRead = true WHERE n.id = :notificationId AND n.recipient.id = :userId")
+    int markNotificationAsReadForUserAndNotificationId(@Param("userId") UUID userId, @Param("notificationId") UUID notificationId);
 }

@@ -4,6 +4,7 @@ import com.gp.GP_backend.domain.space.entity.SpaceMembership;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 import java.util.Optional;
@@ -38,4 +39,7 @@ public interface SpaceMembershipRepository extends JpaRepository<SpaceMembership
 
     @EntityGraph(attributePaths = { "user" })
     List<SpaceMembership> findBySpace_Id(UUID spaceId);
+
+    @Query("SELECT m.user.id FROM SpaceMembership m WHERE m.space.id = :spaceId")
+    List<UUID> findMembersIdsBySpaceId(UUID spaceId);
 }

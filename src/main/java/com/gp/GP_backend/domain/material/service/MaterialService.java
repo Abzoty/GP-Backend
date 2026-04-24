@@ -8,6 +8,7 @@ import com.gp.GP_backend.domain.material.entity.Material;
 import com.gp.GP_backend.domain.material.entity.MaterialLink;
 import com.gp.GP_backend.domain.material.repository.MaterialLinkRepository;
 import com.gp.GP_backend.domain.material.repository.MaterialRepository;
+import com.gp.GP_backend.domain.notification.service.NotificationService;
 import com.gp.GP_backend.domain.space.entity.Space;
 import com.gp.GP_backend.domain.space.repository.SpaceMembershipRepository;
 import com.gp.GP_backend.domain.space.repository.SpaceRepository;
@@ -41,6 +42,7 @@ public class MaterialService {
     private final SpaceRepository spaceRepository;
     private final FileStorageService fileStorageService;
     private final GamificationService gamificationService;
+    private final NotificationService notificationService;
 
     // ─── Upload file ──────────────────────────────────────────────────────────
 
@@ -70,6 +72,7 @@ public class MaterialService {
                 .build();
 
         Material saved = materialRepository.save(material);
+        notificationService.notifyNewMaterialShared(saved, uploader);
 
         gamificationService.awardXp(
                 uploader.getId(),
@@ -98,6 +101,7 @@ public class MaterialService {
                 .build();
 
         Material saved = materialRepository.save(material);
+        notificationService.notifyNewMaterialShared(saved, uploader);
 
         gamificationService.awardXp(
                 uploader.getId(),

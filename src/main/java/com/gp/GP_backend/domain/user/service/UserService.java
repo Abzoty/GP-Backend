@@ -1,5 +1,7 @@
 package com.gp.GP_backend.domain.user.service;
 
+import com.gp.GP_backend.domain.notification.entity.NotificationPreference;
+import com.gp.GP_backend.domain.notification.repository.NotificationPreferencesRepository;
 import com.gp.GP_backend.domain.user.dto.RegisterRequest;
 import com.gp.GP_backend.domain.user.dto.UpdateProfileRequest;
 import com.gp.GP_backend.domain.user.entity.User;
@@ -32,6 +34,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final ModelMapper modelMapper;
     private final EmailService emailService;
+    private final NotificationPreferencesRepository notificationPreferencesRepository;
 
     /**
      * Registers a new user account.
@@ -64,6 +67,13 @@ public class UserService {
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
 
         User saved = userRepository.save(user);
+        notificationPreferencesRepository.save(
+            NotificationPreference.builder()
+                .user(saved)
+                .email(true)
+                .inApp(true)
+                .build()
+        );
 
         // Fire-and-forget email; failure is logged but does not fail the request
         emailService.sendWelcomeEmail(saved.getEmail(), saved.getFullName());
