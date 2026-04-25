@@ -22,4 +22,6 @@ public interface MaterialRepository extends JpaRepository<Material, UUID> {
      * full list variant used by the "get all materials in a space" endpoint.
      */
     List<Material> findBySpaceIdOrderByCreatedAtDesc(UUID spaceId);
+
+    Integer countBySpaceIdAndUploadedById(UUID spaceId, UUID uid);
 }

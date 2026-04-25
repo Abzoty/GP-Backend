@@ -3,6 +3,7 @@ package com.gp.GP_backend.domain.user.controller;
 import com.gp.GP_backend.domain.user.dto.*;
 import com.gp.GP_backend.domain.user.entity.RefreshToken;
 import com.gp.GP_backend.domain.user.entity.User;
+import com.gp.GP_backend.domain.user.service.GamificationService;
 import com.gp.GP_backend.domain.user.service.PasswordResetService;
 import com.gp.GP_backend.domain.user.service.RefreshTokenService;
 import com.gp.GP_backend.domain.user.service.UserService;
@@ -42,6 +43,7 @@ public class AuthController {
         private final AuthenticationManager authenticationManager;
         private final JwtTokenProvider jwtTokenProvider;
         private final ModelMapper modelMapper;
+        private final GamificationService gamificationService;
 
         /**
          * Registers a new user account.
@@ -85,6 +87,9 @@ public class AuthController {
                                 .refreshToken(refreshToken)
                                 .user(modelMapper.map(user, UserResponse.class))
                                 .build();
+
+
+                gamificationService.trackDailyLogin(user.getId());
 
                 return ResponseEntity.ok(ApiResponse.ok("Login successful", body));
         }

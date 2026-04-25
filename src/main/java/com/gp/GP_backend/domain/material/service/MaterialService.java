@@ -12,8 +12,11 @@ import com.gp.GP_backend.domain.space.entity.Space;
 import com.gp.GP_backend.domain.space.repository.SpaceMembershipRepository;
 import com.gp.GP_backend.domain.space.repository.SpaceRepository;
 import com.gp.GP_backend.domain.user.entity.User;
+import com.gp.GP_backend.domain.user.service.GamificationService;
 import com.gp.GP_backend.shared.exception.ApiException;
 import com.gp.GP_backend.shared.storage.FileStorageService;
+import com.gp.GP_backend.shared.util.XpCalculator;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -30,7 +33,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -43,6 +45,7 @@ public class MaterialService {
     private final SpaceMembershipRepository spaceMembershipRepository;
     private final SpaceRepository spaceRepository;
     private final FileStorageService fileStorageService;
+    private final GamificationService gamificationService;
 
     // ─── Upload file ──────────────────────────────────────────────────────────
 
@@ -73,6 +76,13 @@ public class MaterialService {
 
         Material saved = materialRepository.save(material);
 
+        gamificationService.awardXp(
+                uploader.getId(),
+                XpCalculator.EVENT_MATERIAL_SHARED,
+                XpCalculator.XP_MATERIAL_SHARED,
+                saved.getId(),
+                XpCalculator.REF_MATERIAL);
+
         return toResponse(saved, false);
     }
 
@@ -93,6 +103,13 @@ public class MaterialService {
                 .build();
 
         Material saved = materialRepository.save(material);
+
+        gamificationService.awardXp(
+                uploader.getId(),
+                XpCalculator.EVENT_MATERIAL_SHARED,
+                XpCalculator.XP_MATERIAL_SHARED,
+                saved.getId(),
+                XpCalculator.REF_MATERIAL);
 
         return toResponse(saved, false);
     }
@@ -121,6 +138,14 @@ public class MaterialService {
         // Increment the denormalized bookmark counter
         material.setLinkCount(material.getLinkCount() + 1);
         materialRepository.save(material);
+
+        // Award the material's owner, not the person bookmarking
+        gamificationService.awardXp(
+                material.getUploadedBy().getId(),
+                XpCalculator.EVENT_MATERIAL_LINKED,
+                XpCalculator.XP_MATERIAL_LINKED,
+                materialId,
+                XpCalculator.REF_MATERIAL);
     }
 
     // ─── Bookmark (remove) ────────────────────────────────────────────────────
@@ -201,7 +226,8 @@ public class MaterialService {
 
     /**
      * Returns all materials in a space ordered by creation date (newest first).
-     * The isBookmarked flag on each item reflects the requesting user's bookmark state, 
+     * The isBookmarked flag on each item reflects the requesting user's bookmark
+     * state,
      * so the frontend can render bookmark icons without extra calls.
      */
     @Transactional(readOnly = true)
@@ -234,6 +260,8 @@ public class MaterialService {
         }
 
     // Returns only the materials bookmarked by the requesting user in a specific space.
+    // Returns only the materials bookmarked by the requesting user in a specific
+    // space.
     @Transactional(readOnly = true)
     public List<MaterialResponse> getBookmarkedMaterials(UUID spaceId, User user) {
         requireMemberSpace(spaceId, user.getId());

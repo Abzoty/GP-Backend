@@ -21,6 +21,8 @@ import com.gp.GP_backend.domain.user.repository.UserRepository;
 import com.gp.GP_backend.domain.user.service.GamificationService;
 import com.gp.GP_backend.domain.user.service.UserService;
 import com.gp.GP_backend.shared.exception.ApiException;
+import com.gp.GP_backend.shared.util.XpCalculator;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -76,6 +78,7 @@ public class PostService {
         private final UserRepository userRepository;
         private final SpaceRepository spaceRepository;
         private final VoteRepository voteRepository;
+        private final GamificationService gamificationService;
         // private final GamificationService gamificationService;
 
         // NotificationService is injected optionally so the feature compiles even
@@ -127,8 +130,13 @@ public class PostService {
                 Post saved = postRepository.save(post);
                 log.debug("Post created: id={}, spaceId={}, authorId={}", saved.getId(), spaceId, author.getId());
 
-                // Award XP — runs in the same transaction; rolls back with the post on failure
-                // gamificationService.awardXp(author, EVENT_POST_CREATED, XP_POST_CREATED);
+                // Award XP to the author — same transaction
+                gamificationService.awardXp(
+                                author.getId(),
+                                XpCalculator.EVENT_POST_CREATED,
+                                XpCalculator.XP_POST_CREATED,
+                                saved.getId(),
+                                XpCalculator.REF_POST);
 
                 return toPostResponse(saved, author.getFullName(), 0);
         }
@@ -228,7 +236,12 @@ public class PostService {
                 log.debug("Answer created: id={}, postId={}, authorId={}", saved.getId(), postId, author.getId());
 
                 // Award XP to the answerer — same transaction
-                // gamificationService.awardXp(author, EVENT_ANSWER_GIVEN, XP_ANSWER_GIVEN);
+                gamificationService.awardXp(
+                                author.getId(),
+                                XpCalculator.EVENT_ANSWER_GIVEN,
+                                XpCalculator.XP_ANSWER_GIVEN,
+                                saved.getId(),
+                                XpCalculator.REF_ANSWER);
 
                 // TODO: notify question author once NotificationService is implemented
                 // notificationService.notifyNewAnswer(post, saved, author);
@@ -257,6 +270,16 @@ public class PostService {
                 }
                 answerRepository.markAsAccepted(answerId);
                 postRepository.markAsSolved(postId, answerId);
+
+                // Award the answerer for having their answer accepted
+                UUID answerAuthorId = answer.getAuthorId();
+                gamificationService.awardXp(
+                                answerAuthorId,
+                                XpCalculator.EVENT_ANSWER_ACCEPTED,
+                                XpCalculator.XP_ANSWER_ACCEPTED,
+                                answerId,
+                                XpCalculator.REF_ANSWER);
+
                 return true;
         }
 

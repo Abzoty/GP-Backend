@@ -18,7 +18,9 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
     /** Feed sorted by most "Good Question" marks (top posts view). */
     Page<Post> findBySpaceIdOrderByGoodQuestionCountDesc(UUID spaceId, Pageable pageable);
 
-    /** Increments view counter in a single UPDATE — avoids loading the full entity. */
+    /**
+     * Increments view counter in a single UPDATE — avoids loading the full entity.
+     */
     @Modifying
     @Query("UPDATE Post p SET p.viewCount = p.viewCount + 1 WHERE p.id = :id")
     void incrementViewCount(@Param("id") UUID id);
@@ -44,4 +46,11 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
 
     @Query("SELECT s.name FROM Post p JOIN Space s ON p.spaceId = s.id WHERE p.id = :postId")
     String findSpaceNameByPostId(UUID postId);
+
+    /**
+     * Counts posts created by a specific user inside a specific space.
+     * Used by the space leaderboard to compute per-space post stats.
+     */
+    @Query("SELECT COUNT(p) FROM Post p WHERE p.spaceId = :spaceId AND p.authorId = :userId")
+    int countBySpaceIdAndAuthorId(@Param("spaceId") UUID spaceId, @Param("userId") UUID userId);
 }

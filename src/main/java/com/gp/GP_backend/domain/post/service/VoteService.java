@@ -19,8 +19,10 @@ import com.gp.GP_backend.domain.space.entity.Space;
 import com.gp.GP_backend.domain.space.repository.SpaceMembershipRepository;
 import com.gp.GP_backend.domain.space.repository.SpaceRepository;
 import com.gp.GP_backend.domain.user.entity.User;
+import com.gp.GP_backend.domain.user.service.GamificationService;
 import com.gp.GP_backend.shared.exception.ApiException;
 import org.springframework.dao.DataIntegrityViolationException;
+import com.gp.GP_backend.shared.util.XpCalculator;
 
 import jakarta.transaction.Transactional;
 
@@ -49,10 +51,8 @@ public class VoteService {
         private final AnswerRepository answerRepository;
         private final SpaceRepository spaceRepository;
         private final SpaceMembershipRepository spaceMembershipRepository;
-        // private final GamificationService gamificationService;
+        private final GamificationService gamificationService;
 
-
-        
         @Transactional
         public boolean markGoodQuestion(UUID postId, User user) {
                 UUID spaceId = postRepository.findSpaceIdByPostId(postId);
@@ -65,12 +65,12 @@ public class VoteService {
                                 .existsBySpaceIdAndUserId(spaceId, user.getId());
                 if (!isMember) {
                         throw new ApiException(HttpStatus.FORBIDDEN,
-                "User must be a member of the space to vote");
+                                        "User must be a member of the space to vote");
                 }
                 UUID authorId = postRepository.findAuthorIdByPostId(postId);
                 if (authorId.equals(user.getId())) {
                         throw new ApiException(HttpStatus.BAD_REQUEST,
-                "Author cannot vote on their own post");
+                                        "Author cannot vote on their own post");
                 }
                 if (voteRepository.existsByTargetIdAndTargetTypeAndUserId(postId, TargetType.QUESTION, user.getId())) {
                         throw new ApiException(HttpStatus.CONFLICT, "User has already voted on this question");
@@ -83,11 +83,22 @@ public class VoteService {
                                 .voteType(VoteType.GOOD_QUESTION)
                                 .createdAt(LocalDateTime.now())
                                 .build();
+
                 try {
                         voteRepository.save(newVote);
+                                        // Award the post's author, not the voter
+                gamificationService.awardXp(
+                                authorId, // already resolved above
+                                XpCalculator.EVENT_GOOD_QUESTION,
+                                XpCalculator.XP_GOOD_QUESTION,
+                                postId,
+                                XpCalculator.REF_POST);
                 } catch (DataIntegrityViolationException ex) {
                         throw new ApiException(HttpStatus.CONFLICT, "User has already voted on this question");
                 }
+
+
+
                 return true;
         }
 
@@ -106,12 +117,12 @@ public class VoteService {
                                 .existsBySpaceIdAndUserId(spaceId, user.getId());
                 if (!isMember) {
                         throw new ApiException(HttpStatus.FORBIDDEN,
-                "User must be a member of the space to vote");
+                                        "User must be a member of the space to vote");
                 }
                 UUID authorId = answer.getAuthorId();
                 if (authorId.equals(user.getId())) {
                         throw new ApiException(HttpStatus.BAD_REQUEST,
-                "Author cannot vote on their own answer");
+                                        "Author cannot vote on their own answer");
                 }
                 if (voteRepository.existsByTargetIdAndTargetTypeAndUserId(answerId, TargetType.ANSWER, user.getId())) {
                         throw new ApiException(HttpStatus.CONFLICT, "User has already voted on this answer");
@@ -124,15 +135,25 @@ public class VoteService {
                                 .voteType(VoteType.UPVOTE)
                                 .createdAt(LocalDateTime.now())
                                 .build();
+
                 try {
                         voteRepository.save(newVote);
+                // Award the answer's author, not the voter
+                gamificationService.awardXp(
+                                authorId, // already resolved above
+                                XpCalculator.EVENT_ANSWER_UPVOTED,
+                                XpCalculator.XP_ANSWER_UPVOTED,
+                                answerId,
+                                XpCalculator.REF_ANSWER);
                 } catch (DataIntegrityViolationException ex) {
                         throw new ApiException(HttpStatus.CONFLICT, "User has already voted on this answer");
                 }
+
                 return true;
         }
 
-        public boolean hasMarkedGoodQuestion(UUID currentUserId, UUID postId){
-                return voteRepository.existsByTargetIdAndTargetTypeAndUserId(postId, TargetType.QUESTION, currentUserId);
+        public boolean hasMarkedGoodQuestion(UUID currentUserId, UUID postId) {
+                return voteRepository.existsByTargetIdAndTargetTypeAndUserId(postId, TargetType.QUESTION,
+                                currentUserId);
         }
 }
