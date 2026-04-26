@@ -12,6 +12,8 @@ import com.gp.GP_backend.shared.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -89,7 +91,15 @@ public class AuthController {
                                 .build();
 
 
-                gamificationService.trackDailyLogin(user.getId());
+                        //  Fix — isolate gamification from the auth result
+                        try {
+                        gamificationService.trackDailyLogin(user.getId());
+                        } catch (Exception ex) {
+                        Logger logger = LoggerFactory.getLogger(AuthController.class);
+                        logger.warn("Gamification tracking failed for user {} — login still succeeds: {}",
+                                user.getId(), ex.getMessage());
+
+                        }
 
                 return ResponseEntity.ok(ApiResponse.ok("Login successful", body));
         }

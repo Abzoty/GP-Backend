@@ -18,4 +18,7 @@ public interface XpTransactionRepository extends JpaRepository<XpTransaction, UU
 
     /** Full XP history for a user, newest first. */
     List<XpTransaction> findByUserIdOrderByCreatedAtDesc(UUID userId);
+
+    // /** Fast dedup check for idempotent XP writes. */
+    // boolean existsByEventKey(String eventKey);
 }

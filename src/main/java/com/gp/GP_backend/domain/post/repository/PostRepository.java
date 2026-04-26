@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.UUID;
 
 public interface PostRepository extends JpaRepository<Post, UUID> {
@@ -53,4 +54,11 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
      */
     @Query("SELECT COUNT(p) FROM Post p WHERE p.spaceId = :spaceId AND p.authorId = :userId")
     int countBySpaceIdAndAuthorId(@Param("spaceId") UUID spaceId, @Param("userId") UUID userId);
+    @Query("""
+        SELECT p.authorId, COUNT(p)
+        FROM Post p
+        WHERE p.spaceId = :spaceId
+        GROUP BY p.authorId
+        """)
+    List<Object[]> countBySpaceIdGroupByAuthor(@Param("spaceId") UUID spaceId);
 }

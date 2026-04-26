@@ -73,6 +73,7 @@ public class MaterialService {
                 .url(filename) // stored filename on disk
                 .fileSizeKb(fileSizeKb)
                 .build();
+try{
 
         Material saved = materialRepository.save(material);
 
@@ -84,6 +85,9 @@ public class MaterialService {
                 XpCalculator.REF_MATERIAL);
 
         return toResponse(saved, false);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ApiException(HttpStatus.CONFLICT, "You have already uploaded a file with the same name in this space");
+        }
     }
 
     // ─── Share link ────────────────────────────────────────────────────────────
@@ -101,6 +105,7 @@ public class MaterialService {
                 .url(request.getUrl())
                 .fileSizeKb(null) // links have no file size
                 .build();
+try{
 
         Material saved = materialRepository.save(material);
 
@@ -110,8 +115,10 @@ public class MaterialService {
                 XpCalculator.XP_MATERIAL_SHARED,
                 saved.getId(),
                 XpCalculator.REF_MATERIAL);
-
-        return toResponse(saved, false);
+                return toResponse(saved, false);
+                } catch (DataIntegrityViolationException ex) {
+            throw new ApiException(HttpStatus.CONFLICT, "You have already shared this link in this space");
+        }
     }
 
     // ─── Bookmark (add) ────────────────────────────────────────────────────────
@@ -131,21 +138,22 @@ public class MaterialService {
                 .build();
         try {
             materialLinkRepository.save(link);
+
+            materialLinkRepository.incrementLinkCount(materialId);
+
+            // Award the material owner only when another user bookmarks it.
+            UUID ownerId = material.getUploadedBy().getId();
+            if (!ownerId.equals(user.getId())) {
+                gamificationService.awardXp(
+                        ownerId,
+                        XpCalculator.EVENT_MATERIAL_LINKED,
+                        XpCalculator.XP_MATERIAL_LINKED,
+                        materialId,
+                        XpCalculator.REF_MATERIAL);
+            }
         } catch (DataIntegrityViolationException ex) {
             throw new ApiException(HttpStatus.CONFLICT, "You have already bookmarked this material");
         }
-
-        // Increment the denormalized bookmark counter
-        material.setLinkCount(material.getLinkCount() + 1);
-        materialRepository.save(material);
-
-        // Award the material's owner, not the person bookmarking
-        gamificationService.awardXp(
-                material.getUploadedBy().getId(),
-                XpCalculator.EVENT_MATERIAL_LINKED,
-                XpCalculator.XP_MATERIAL_LINKED,
-                materialId,
-                XpCalculator.REF_MATERIAL);
     }
 
     // ─── Bookmark (remove) ────────────────────────────────────────────────────
@@ -162,8 +170,7 @@ public class MaterialService {
         materialLinkRepository.delete(link);
 
         // Decrement the counter, guarding against going below zero
-        material.setLinkCount(Math.max(0, material.getLinkCount() - 1));
-        materialRepository.save(material);
+        materialLinkRepository.decrementLinkCount(materialId);
     }
 
     // ─── Edit ─────────────────────────────────────────────────────────────────
@@ -245,9 +252,13 @@ public class MaterialService {
                 .toList();
     }
 
-        @Transactional(readOnly = true)
-        public Page<MaterialResponse> getMaterialsBySpacePaged(UUID spaceId, User user, int page, int size) {
+        // CHANGE — add the size cap inside the service as a second line of defence
+    @Transactional(readOnly = true)
+    public Page<MaterialResponse> getMaterialsBySpacePaged(UUID spaceId, User user, int page, int size) {
         requireMemberSpace(spaceId, user.getId());
+
+        //  ADD — never trust the caller, cap inside the service too
+        int safeSize = Math.min(size, 50);
 
         Set<UUID> bookmarkedMaterialIds = new HashSet<>(
             materialLinkRepository.findByUserIdAndSpaceId(user.getId(), spaceId)
@@ -255,20 +266,22 @@ public class MaterialService {
                 .map(link -> link.getMaterial().getId())
                 .toList());
 
-        return materialRepository.findBySpaceIdOrderByCreatedAtDesc(spaceId, PageRequest.of(page, size))
+        //  CHANGE — use safeSize instead of size
+        return materialRepository.findBySpaceIdOrderByCreatedAtDesc(spaceId, PageRequest.of(page, safeSize))
             .map(m -> toResponse(m, bookmarkedMaterialIds.contains(m.getId())));
-        }
+    }
 
     // Returns only the materials bookmarked by the requesting user in a specific space.
     // Returns only the materials bookmarked by the requesting user in a specific
     // space.
+   // CHANGE to paginated
     @Transactional(readOnly = true)
-    public List<MaterialResponse> getBookmarkedMaterials(UUID spaceId, User user) {
+    public Page<MaterialResponse> getBookmarkedMaterials(UUID spaceId, User user, int page, int size) {
         requireMemberSpace(spaceId, user.getId());
-        return materialLinkRepository.findByUserIdAndSpaceId(user.getId(), spaceId)
-                .stream()
-                .map(link -> toResponse(link.getMaterial(), true)) // isBookmarked always true here
-                .toList();
+        int safeSize = Math.min(size, 50);
+        return materialLinkRepository
+                .findByUserIdAndSpaceId(user.getId(), spaceId, PageRequest.of(page, safeSize))
+                .map(link -> toResponse(link.getMaterial(), true));
     }
 
     // ─── Private helpers ──────────────────────────────────────────────────────

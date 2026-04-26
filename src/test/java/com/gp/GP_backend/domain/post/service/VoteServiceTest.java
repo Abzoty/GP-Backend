@@ -9,6 +9,7 @@ import com.gp.GP_backend.domain.space.entity.Space;
 import com.gp.GP_backend.domain.space.repository.SpaceMembershipRepository;
 import com.gp.GP_backend.domain.space.repository.SpaceRepository;
 import com.gp.GP_backend.domain.user.entity.User;
+import com.gp.GP_backend.domain.user.service.GamificationService;
 import com.gp.GP_backend.shared.exception.ApiException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,6 +48,9 @@ class VoteServiceTest {
 
     @Mock
     private SpaceMembershipRepository spaceMembershipRepository;
+
+    @Mock
+    private GamificationService gamificationService;
 
     @InjectMocks
     private VoteService voteService;

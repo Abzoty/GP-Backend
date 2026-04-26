@@ -19,6 +19,7 @@ import com.gp.GP_backend.shared.exception.ApiException;
 import com.gp.GP_backend.shared.util.XpCalculator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -128,40 +129,49 @@ public class GamificationService {
             UUID referenceId,
             String referenceType) {
 
-        GamificationProfile profile = getOrCreateProfile(userId);
+            if (xpDelta <= 0) {
+        throw new ApiException(HttpStatus.BAD_REQUEST,
+                "xpDelta must be positive for XP awards");
+    }
 
-        // Update XP and level
-        int newXp = profile.getXpPoints() + xpDelta;
-        profile.setXpPoints(newXp);
-        profile.setLevel(XpCalculator.calculateLevel(newXp));
+    GamificationProfile profile = getOrCreateProfile(userId);
 
-        // Update denormalised activity counters
-        switch (eventType) {
-            case XpCalculator.EVENT_POST_CREATED ->
+    // Update XP and level
+    int newXp = profile.getXpPoints() + xpDelta;
+    profile.setXpPoints(newXp);
+    profile.setLevel(XpCalculator.calculateLevel(newXp));
+
+    // Update counters
+    switch (eventType) {
+        case XpCalculator.EVENT_POST_CREATED ->
                 profile.setTotalPosts(profile.getTotalPosts() + 1);
-            case XpCalculator.EVENT_ANSWER_GIVEN ->
+
+        case XpCalculator.EVENT_ANSWER_GIVEN ->
                 profile.setTotalAnswers(profile.getTotalAnswers() + 1);
-            case XpCalculator.EVENT_ANSWER_UPVOTED ->
+
+        case XpCalculator.EVENT_ANSWER_UPVOTED ->
                 profile.setTotalUpvotesReceived(profile.getTotalUpvotesReceived() + 1);
-            case XpCalculator.EVENT_MATERIAL_SHARED ->
+
+        case XpCalculator.EVENT_MATERIAL_SHARED ->
                 profile.setTotalMaterialsShared(profile.getTotalMaterialsShared() + 1);
-            default -> {
-                /* no counter for other events */ }
-        }
 
-        gamificationProfileRepository.save(profile);
+        default -> { }
+    }
 
-        // Append immutable audit record
-        XpTransaction tx = XpTransaction.builder()
-                .user(userRepository.getReferenceById(userId))
-                .eventType(eventType)
-                .xpDelta(xpDelta)
-                .referenceId(referenceId)
-                .referenceType(referenceType)
-                .build();
-        xpTransactionRepository.save(tx);
+    gamificationProfileRepository.save(profile);
 
-        log.debug("Awarded {} XP ({}) to user {}", xpDelta, eventType, userId);
+    // Save transaction (NO eventKey)
+    XpTransaction tx = XpTransaction.builder()
+            .user(userRepository.getReferenceById(userId))
+            .eventType(eventType)
+            .xpDelta(xpDelta)
+            .referenceId(referenceId)
+            .referenceType(referenceType)
+            .build();
+
+    xpTransactionRepository.save(tx);
+
+    log.debug("Awarded {} XP ({}) to user {}", xpDelta, eventType, userId);
     }
 
     // ─── Daily login + streak tracking ───────────────────────────────────────
@@ -205,39 +215,42 @@ public class GamificationService {
         profile.setLastActivityDate(today);
 
         // ── Award daily login XP ──────────────────────────────────────────
-        int newXp = profile.getXpPoints() + XpCalculator.XP_DAILY_LOGIN;
-        profile.setXpPoints(newXp);
-        profile.setLevel(XpCalculator.calculateLevel(newXp));
-        gamificationProfileRepository.save(profile);
+int newXp = profile.getXpPoints() + XpCalculator.XP_DAILY_LOGIN;
+profile.setXpPoints(newXp);
+profile.setLevel(XpCalculator.calculateLevel(newXp));
 
-        xpTransactionRepository.save(XpTransaction.builder()
+gamificationProfileRepository.save(profile);
+
+xpTransactionRepository.save(
+        XpTransaction.builder()
                 .user(userRepository.getReferenceById(userId))
                 .eventType(XpCalculator.EVENT_DAILY_LOGIN)
                 .xpDelta(XpCalculator.XP_DAILY_LOGIN)
                 .referenceType(XpCalculator.REF_LOGIN)
-                .build());
+                .build()
+);
 
         // ── Streak milestone bonus ────────────────────────────────────────
-        if (XpCalculator.isStreakMilestone(profile.getCurrentStreakDays())) {
-            int bonusXp = XpCalculator.XP_STREAK_BONUS;
-            int xpAfterBonus = profile.getXpPoints() + bonusXp;
-            profile.setXpPoints(xpAfterBonus);
-            profile.setLevel(XpCalculator.calculateLevel(xpAfterBonus));
-            gamificationProfileRepository.save(profile);
+if (XpCalculator.isStreakMilestone(profile.getCurrentStreakDays())) {
 
-            xpTransactionRepository.save(XpTransaction.builder()
+    int bonusXp = XpCalculator.XP_STREAK_BONUS;
+
+    int xpAfterBonus = profile.getXpPoints() + bonusXp;
+    profile.setXpPoints(xpAfterBonus);
+    profile.setLevel(XpCalculator.calculateLevel(xpAfterBonus));
+        //  REMOVE this line — dirty-checking handles it
+        // gamificationProfileRepository.save(profile);
+         //  KEEP — the audit record still needs an explicit save
+    xpTransactionRepository.save(
+            XpTransaction.builder()
                     .user(userRepository.getReferenceById(userId))
                     .eventType(XpCalculator.EVENT_STREAK_BONUS)
                     .xpDelta(bonusXp)
                     .referenceType(XpCalculator.REF_LOGIN)
-                    .build());
+                    .build()
+    );
+}
 
-            log.debug("Streak milestone {} reached for user {} — {} bonus XP awarded",
-                    profile.getCurrentStreakDays(), userId, bonusXp);
-        }
-
-        log.debug("Daily login tracked for user {} (streak={})", userId,
-                profile.getCurrentStreakDays());
     }
 
     // ─── Profile retrieval ────────────────────────────────────────────────────
@@ -322,31 +335,52 @@ public class GamificationService {
                 .stream()
                 .collect(Collectors.toMap(p -> p.getUser().getId(), p -> p));
 
-        // Build an entry per member, then sort and assign ranks
-        int safeLimit = Math.min(limit, 100);
+// ✅ ADD — bulk-load all counts in 3 queries (not N×3)
+Map<UUID, Long> postCounts = postRepository
+        .countBySpaceIdGroupByAuthor(spaceId)
+        .stream()
+        .collect(Collectors.toMap(
+                row -> (UUID) row[0],
+                row -> (Long)  row[1]));
 
-        List<SpaceLeaderboardEntry> entries = memberships.stream()
-                .map(m -> {
-                    UUID uid = m.getUser().getId();
-                    GamificationProfile profile = profileMap.get(uid);
+Map<UUID, Long> answerCounts = answerRepository
+        .countBySpaceIdGroupByAuthor(spaceId)
+        .stream()
+        .collect(Collectors.toMap(
+                row -> (UUID) row[0],
+                row -> (Long)  row[1]));
 
-                    return SpaceLeaderboardEntry.builder()
-                            .userId(uid)
-                            .fullName(m.getUser().getFullName())
-                            .xpPoints(profile != null ? profile.getXpPoints() : 0)
-                            .level(profile != null ? profile.getLevel() : (short) 1)
-                            .postsInSpace(postRepository.countBySpaceIdAndAuthorId(spaceId, uid))
-                            .answersInSpace(answerRepository.countByAuthorIdInSpace(uid, spaceId))
-                            .materialsSharedInSpace(
-                                    materialRepository.countBySpaceIdAndUploadedById(spaceId, uid))
-                            .build();
-                })
-                .sorted(Comparator
-                        .comparingInt(SpaceLeaderboardEntry::getXpPoints).reversed()
-                        .thenComparing(
-                                Comparator.comparingInt(e -> -e.getLevel())))
-                .limit(safeLimit)
-                .collect(Collectors.toList());
+Map<UUID, Long> materialCounts = materialRepository
+        .countBySpaceIdGroupByUploader(spaceId)
+        .stream()
+        .collect(Collectors.toMap(
+                row -> (UUID) row[0],
+                row -> (Long)  row[1]));
+
+int safeLimit = Math.min(limit, 100);
+
+//  CHANGE — the .map() now reads from the pre-built maps (no per-member queries)
+List<SpaceLeaderboardEntry> entries = memberships.stream()
+        .map(m -> {
+            UUID uid = m.getUser().getId();
+            GamificationProfile profile = profileMap.get(uid);
+
+            return SpaceLeaderboardEntry.builder()
+                    .userId(uid)
+                    .fullName(m.getUser().getFullName())
+                    .xpPoints(profile != null ? profile.getXpPoints() : 0)
+                    .level(profile != null ? profile.getLevel() : (short) 1)
+                    // reads from map — zero queries here
+                    .postsInSpace(postCounts.getOrDefault(uid, 0L).intValue())
+                    .answersInSpace(answerCounts.getOrDefault(uid, 0L).intValue())
+                    .materialsSharedInSpace(materialCounts.getOrDefault(uid, 0L).intValue())
+                    .build();
+        })
+        .sorted(Comparator
+                .comparingInt(SpaceLeaderboardEntry::getXpPoints).reversed()
+                .thenComparing(Comparator.comparingInt(e -> -e.getLevel())))
+        .limit(safeLimit)
+        .collect(Collectors.toList());
 
         // Assign 1-based ranks after sorting
         AtomicInteger rank = new AtomicInteger(1);
@@ -367,9 +401,15 @@ public class GamificationService {
                     GamificationProfile fresh = GamificationProfile.builder()
                             .user(userRepository.getReferenceById(userId))
                             .build();
-                    GamificationProfile saved = gamificationProfileRepository.save(fresh);
-                    log.debug("Lazily created gamification profile for user {}", userId);
-                    return saved;
+                    try {
+                        GamificationProfile saved = gamificationProfileRepository.save(fresh);
+                        log.debug("Lazily created gamification profile for user {}", userId);
+                        return saved;
+                    } catch (DataIntegrityViolationException ex) {
+                        // Another transaction created it first.
+                        return gamificationProfileRepository.findByUserId(userId)
+                                .orElseThrow(() -> ex);
+                    }
                 });
     }
 

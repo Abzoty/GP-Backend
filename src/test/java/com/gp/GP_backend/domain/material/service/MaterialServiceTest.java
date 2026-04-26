@@ -11,6 +11,7 @@ import com.gp.GP_backend.domain.space.entity.Space;
 import com.gp.GP_backend.domain.space.repository.SpaceMembershipRepository;
 import com.gp.GP_backend.domain.space.repository.SpaceRepository;
 import com.gp.GP_backend.domain.user.entity.User;
+import com.gp.GP_backend.domain.user.service.GamificationService;
 import com.gp.GP_backend.shared.exception.ApiException;
 import com.gp.GP_backend.shared.storage.FileStorageService;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -55,6 +57,9 @@ class MaterialServiceTest {
 
     @Mock
     private FileStorageService fileStorageService;
+
+    @Mock
+    private GamificationService gamificationService;
 
     @InjectMocks
     private MaterialService materialService;
@@ -185,6 +190,22 @@ class MaterialServiceTest {
         ApiException ex = assertThrows(ApiException.class, () -> materialService.bookmark(materialId, user));
 
         assertEquals(HttpStatus.CONFLICT, ex.getStatus());
+    }
+
+    @Test
+    void bookmarkOwnMaterialShouldNotAwardXp() {
+        User user = user();
+        UUID materialId = UUID.randomUUID();
+        Material material = material(space(UUID.randomUUID()), user);
+        material.setId(materialId);
+
+        when(materialRepository.findById(materialId)).thenReturn(Optional.of(material));
+        when(spaceMembershipRepository.existsBySpaceIdAndUserId(material.getSpace().getId(), user.getId())).thenReturn(true);
+        when(materialLinkRepository.existsByMaterialIdAndUserId(materialId, user.getId())).thenReturn(false);
+
+        materialService.bookmark(materialId, user);
+
+        verify(gamificationService, never()).awardXp(any(), any(), anyInt(), any(), any());
     }
 
     @Test

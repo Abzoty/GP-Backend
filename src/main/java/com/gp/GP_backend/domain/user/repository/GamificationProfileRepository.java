@@ -22,6 +22,14 @@ public interface GamificationProfileRepository extends JpaRepository<Gamificatio
         @Query("SELECT gp FROM GamificationProfile gp WHERE gp.user.id = :userId")
         Optional<GamificationProfile> findByUserId(@Param("userId") UUID userId);
 
+        // /**
+        //  * Write-path profile lookup with row-level lock to prevent concurrent
+        //  * lost updates when awarding XP.
+        //  */
+        // @Lock(LockModeType.PESSIMISTIC_WRITE)
+        // @Query("SELECT gp FROM GamificationProfile gp WHERE gp.user.id = :userId")
+        // Optional<GamificationProfile> findByUserIdForUpdate(@Param("userId") UUID userId);
+
         /**
          * Loads profiles for a set of user IDs in a single query, eager-fetching
          * the associated {@code User} to avoid N+1 in leaderboard mapping.

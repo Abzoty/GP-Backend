@@ -268,11 +268,23 @@ public class PostService {
                         throw new ApiException(HttpStatus.BAD_REQUEST,
                                         "Answer does not belong to the specified post");
                 }
+                UUID answerAuthorId = answer.getAuthorId();
+                 //check the answer already accepted 
+                if (answer.getIsAccepted()) {
+                        throw new ApiException(HttpStatus.BAD_REQUEST,
+                                        "Answer is already accepted");
+                }
+                // it can make its own answer accepted but doesn't get XP for it
+                if (answerAuthorId.equals(post.getAuthorId())) {
+                        answerRepository.markAsAccepted(answerId);
+                        postRepository.markAsSolved(postId, answerId);
+                        return true;
+                        
+                }
                 answerRepository.markAsAccepted(answerId);
                 postRepository.markAsSolved(postId, answerId);
 
                 // Award the answerer for having their answer accepted
-                UUID answerAuthorId = answer.getAuthorId();
                 gamificationService.awardXp(
                                 answerAuthorId,
                                 XpCalculator.EVENT_ANSWER_ACCEPTED,

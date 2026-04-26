@@ -60,4 +60,12 @@ public interface AnswerRepository extends JpaRepository<Answer, UUID> {
                         AND a.postId IN (SELECT p.id FROM Post p WHERE p.spaceId = :spaceId)
                         """)
         int countByAuthorIdInSpace(@Param("userId") UUID userId, @Param("spaceId") UUID spaceId);
-}
+         @Query("""
+        SELECT a.authorId, COUNT(a)
+        FROM Answer a
+        JOIN Post p ON a.postId = p.id
+        WHERE p.spaceId = :spaceId
+        GROUP BY a.authorId
+        """)
+        List<Object[]> countBySpaceIdGroupByAuthor(@Param("spaceId") UUID spaceId);
+    }

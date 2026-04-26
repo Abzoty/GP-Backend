@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -162,7 +163,20 @@ public class MaterialController {
         List<MaterialResponse> materials = materialService.getMaterialsBySpace(spaceId, user);
         return ResponseEntity.ok(ApiResponse.ok("Materials retrieved", materials));
     }
+    // all materails endpoints with pagination
+    @GetMapping("/space/{spaceId}/materials")
+    public ResponseEntity<ApiResponse<Page<MaterialResponse>>> getMaterials(
+            @PathVariable UUID spaceId,
+            @AuthenticationPrincipal User user,
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "20") int size) {
 
+        // Cap size so clients can't request 999999 items
+        int safeSize = Math.min(size, 50);
+
+        return ResponseEntity.ok(ApiResponse.ok("Materials fetched",
+                materialService.getMaterialsBySpacePaged(spaceId, user, page, safeSize)));
+    }
     @GetMapping("/space/{spaceId}/paged")
     @Operation(summary = "Get paged materials in a space")
     public ResponseEntity<ApiResponse<PagedResponse<MaterialResponse>>> getMaterialsBySpacePaged(
@@ -186,11 +200,13 @@ public class MaterialController {
 
     @GetMapping("/space/{spaceId}/bookmarked")
     @Operation(summary = "Get bookmarked materials in a space for the current user")
-    public ResponseEntity<ApiResponse<List<MaterialResponse>>> getBookmarkedMaterials(
+    public ResponseEntity<ApiResponse<Page<MaterialResponse>>> getBookmarkedMaterials(
             @PathVariable UUID spaceId,
-            @AuthenticationPrincipal User user) {
+            @AuthenticationPrincipal User user,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
 
-        List<MaterialResponse> materials = materialService.getBookmarkedMaterials(spaceId, user);
+        Page<MaterialResponse> materials = materialService.getBookmarkedMaterials(spaceId, user, page, size);
         return ResponseEntity.ok(ApiResponse.ok("Bookmarked materials retrieved", materials));
     }
 

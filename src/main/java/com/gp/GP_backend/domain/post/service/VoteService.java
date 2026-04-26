@@ -24,7 +24,8 @@ import com.gp.GP_backend.shared.exception.ApiException;
 import org.springframework.dao.DataIntegrityViolationException;
 import com.gp.GP_backend.shared.util.XpCalculator;
 
-import jakarta.transaction.Transactional;
+//import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Handles upvoting of answers and "good question" votes on posts.
