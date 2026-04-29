@@ -58,6 +58,32 @@ class GamificationServiceIntegrationTest {
     }
 
     @Test
+    void awardXpShouldAwardTwiceForDifferentReferences() {
+        User user = userRepository.save(newUser("two-posts"));
+
+        UUID post1 = UUID.randomUUID();
+        UUID post2 = UUID.randomUUID();
+
+        gamificationService.awardXp(
+                user.getId(),
+                XpCalculator.EVENT_POST_CREATED,
+                XpCalculator.XP_POST_CREATED,
+                post1,
+                XpCalculator.REF_POST);
+        gamificationService.awardXp(
+                user.getId(),
+                XpCalculator.EVENT_POST_CREATED,
+                XpCalculator.XP_POST_CREATED,
+                post2,
+                XpCalculator.REF_POST);
+
+        GamificationProfile profile = gamificationProfileRepository.findByUserId(user.getId()).orElseThrow();
+        assertEquals(XpCalculator.XP_POST_CREATED * 2, profile.getXpPoints());
+        assertEquals(2, profile.getTotalPosts());
+        assertEquals(2, xpTransactionRepository.findByUserIdOrderByCreatedAtDesc(user.getId()).size());
+    }
+
+    @Test
     void trackDailyLoginShouldOnlyAwardOncePerDay() {
         User user = userRepository.save(newUser("daily"));
 

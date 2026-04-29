@@ -91,6 +91,8 @@ class PostServiceGamificationTest {
 
         when(postRepository.findById(postId)).thenReturn(Optional.of(post));
         when(answerRepository.findById(answerId)).thenReturn(Optional.of(answer));
+        when(answerRepository.markAsAccepted(answerId)).thenReturn(1);
+        when(postRepository.markAsSolved(postId, answerId)).thenReturn(1);
 
         boolean result = postService.markQuestionAsSolved(postId, answerId, actor);
 

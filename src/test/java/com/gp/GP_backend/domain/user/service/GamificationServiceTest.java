@@ -32,10 +32,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -87,16 +83,17 @@ class GamificationServiceTest {
         UUID userId = UUID.randomUUID();
         GamificationProfile profile = profile(userId);
 
-        when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
         when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
         when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(xpTransactionRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
+        UUID postId = UUID.randomUUID();
         gamificationService.awardXp(
                 userId,
                 XpCalculator.EVENT_POST_CREATED,
                 XpCalculator.XP_POST_CREATED,
-                UUID.randomUUID(),
+                postId,
                 XpCalculator.REF_POST);
 
         assertEquals(XpCalculator.XP_POST_CREATED, profile.getXpPoints());
@@ -104,10 +101,13 @@ class GamificationServiceTest {
         assertEquals(XpCalculator.calculateLevel(XpCalculator.XP_POST_CREATED), profile.getLevel());
 
         ArgumentCaptor<XpTransaction> txCaptor = ArgumentCaptor.forClass(XpTransaction.class);
-        verify(xpTransactionRepository).save(txCaptor.capture());
+                verify(xpTransactionRepository).saveAndFlush(txCaptor.capture());
         assertEquals(XpCalculator.EVENT_POST_CREATED, txCaptor.getValue().getEventType());
         assertEquals(Integer.valueOf(XpCalculator.XP_POST_CREATED), txCaptor.getValue().getXpDelta());
         assertEquals(XpCalculator.REF_POST, txCaptor.getValue().getReferenceType());
+                assertNotNull(txCaptor.getValue().getEventKey());
+                assertTrue(txCaptor.getValue().getEventKey().contains(userId.toString()));
+                assertTrue(txCaptor.getValue().getEventKey().contains(postId.toString()));
     }
 
     @Test
@@ -137,10 +137,15 @@ class GamificationServiceTest {
         UUID userId = UUID.randomUUID();
         User user = User.builder().id(userId).build();
 
-        when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.empty());
+        GamificationProfile created = profile(userId);
+
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(created));
         when(userRepository.getReferenceById(userId)).thenReturn(user);
+        when(gamificationProfileRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
         when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(xpTransactionRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         gamificationService.awardXp(
                 userId,
@@ -149,9 +154,9 @@ class GamificationServiceTest {
                 UUID.randomUUID(),
                 XpCalculator.REF_ANSWER);
 
-        // First save = lazy profile creation, second save = profile XP update
-        verify(gamificationProfileRepository, times(2)).save(any(GamificationProfile.class));
-        verify(xpTransactionRepository, times(1)).save(any(XpTransaction.class));
+        verify(gamificationProfileRepository, times(1)).saveAndFlush(any(GamificationProfile.class));
+        verify(gamificationProfileRepository, atLeastOnce()).save(any(GamificationProfile.class));
+        verify(xpTransactionRepository, times(1)).saveAndFlush(any(XpTransaction.class));
     }
 
     @Test
@@ -159,10 +164,10 @@ class GamificationServiceTest {
         UUID userId = UUID.randomUUID();
         GamificationProfile profile = profile(userId);
 
-        when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
         when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
         when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(xpTransactionRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         gamificationService.awardXp(userId, XpCalculator.EVENT_ANSWER_GIVEN,
                 XpCalculator.XP_ANSWER_GIVEN, UUID.randomUUID(), XpCalculator.REF_ANSWER);
@@ -176,10 +181,10 @@ class GamificationServiceTest {
         UUID userId = UUID.randomUUID();
         GamificationProfile profile = profile(userId);
 
-        when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
         when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
         when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(xpTransactionRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         gamificationService.awardXp(userId, XpCalculator.EVENT_ANSWER_UPVOTED,
                 XpCalculator.XP_ANSWER_UPVOTED, UUID.randomUUID(), XpCalculator.REF_ANSWER);
@@ -192,10 +197,10 @@ class GamificationServiceTest {
         UUID userId = UUID.randomUUID();
         GamificationProfile profile = profile(userId);
 
-        when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
         when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
         when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(xpTransactionRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         gamificationService.awardXp(userId, XpCalculator.EVENT_MATERIAL_SHARED,
                 XpCalculator.XP_MATERIAL_SHARED, UUID.randomUUID(), XpCalculator.REF_MATERIAL);
@@ -203,35 +208,53 @@ class GamificationServiceTest {
         assertEquals(Integer.valueOf(1), profile.getTotalMaterialsShared());
     }
 
-    /**
-     * Documents a KNOWN VULNERABILITY: awardXp() has no idempotency guard.
-     * Calling it twice for the same logical event double-awards XP.
-     * This is only safe because callers (PostService, MaterialService, VoteService)
-     * are responsible for ensuring single invocation.
-     * See Issue #9 — if those callers don't enforce it, XP farming is possible.
-     */
     @Test
-    void awardXp_knownVulnerability_duplicateCallsDoubleAwardXp() {
+        void awardXp_shouldBeIdempotentForSameReference() {
         UUID userId = UUID.randomUUID();
         GamificationProfile profile = profile(userId);
+                UUID postId = UUID.randomUUID();
 
-        when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+                when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
         when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
         when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+                AtomicInteger txSaves = new AtomicInteger();
+                when(xpTransactionRepository.saveAndFlush(any())).thenAnswer(i -> {
+                        if (txSaves.incrementAndGet() == 2) {
+                                throw new DataIntegrityViolationException("duplicate event_key");
+                        }
+                        return i.getArgument(0);
+                });
 
         gamificationService.awardXp(userId, XpCalculator.EVENT_POST_CREATED,
-                XpCalculator.XP_POST_CREATED, UUID.randomUUID(), XpCalculator.REF_POST);
+                                XpCalculator.XP_POST_CREATED, postId, XpCalculator.REF_POST);
         gamificationService.awardXp(userId, XpCalculator.EVENT_POST_CREATED,
-                XpCalculator.XP_POST_CREATED, UUID.randomUUID(), XpCalculator.REF_POST);
+                                XpCalculator.XP_POST_CREATED, postId, XpCalculator.REF_POST);
 
-        // Documents the vulnerability — XP is doubled on duplicate calls.
-        // FIX REQUIRED: callers must never call awardXp twice for the same action.
-        // Long-term fix: add an idempotency key to XpTransaction and reject duplicates.
-        assertEquals(Integer.valueOf(XpCalculator.XP_POST_CREATED * 2), profile.getXpPoints());
-        assertEquals(Integer.valueOf(2), profile.getTotalPosts());
-        verify(xpTransactionRepository, times(2)).save(any(XpTransaction.class));
+                assertEquals(Integer.valueOf(XpCalculator.XP_POST_CREATED), profile.getXpPoints());
+                assertEquals(Integer.valueOf(1), profile.getTotalPosts());
+                verify(xpTransactionRepository, times(2)).saveAndFlush(any(XpTransaction.class));
     }
+
+        @Test
+        void awardXp_shouldAwardTwiceForDifferentReferences() {
+                UUID userId = UUID.randomUUID();
+                GamificationProfile profile = profile(userId);
+
+                when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
+                when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
+                when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+                when(xpTransactionRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+                gamificationService.awardXp(userId, XpCalculator.EVENT_POST_CREATED,
+                                XpCalculator.XP_POST_CREATED, UUID.randomUUID(), XpCalculator.REF_POST);
+                gamificationService.awardXp(userId, XpCalculator.EVENT_POST_CREATED,
+                                XpCalculator.XP_POST_CREATED, UUID.randomUUID(), XpCalculator.REF_POST);
+
+                assertEquals(Integer.valueOf(XpCalculator.XP_POST_CREATED * 2), profile.getXpPoints());
+                assertEquals(Integer.valueOf(2), profile.getTotalPosts());
+                verify(xpTransactionRepository, times(2)).saveAndFlush(any(XpTransaction.class));
+        }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // revokeXp
@@ -370,11 +393,11 @@ class GamificationServiceTest {
         GamificationProfile profile = profile(userId);
         profile.setLastActivityDate(LocalDate.now());
 
-        when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+                when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
 
         gamificationService.trackDailyLogin(userId);
 
-        verify(xpTransactionRepository, never()).save(any());
+                verify(xpTransactionRepository, never()).saveAndFlush(any());
         verify(gamificationProfileRepository, never()).save(any());
     }
 
@@ -383,9 +406,10 @@ class GamificationServiceTest {
         UUID userId = UUID.randomUUID();
         GamificationProfile profile = profile(userId); // lastActivityDate = null
 
-        when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+                when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
         when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
-        when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+                when(xpTransactionRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+                when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         gamificationService.trackDailyLogin(userId);
 
@@ -394,8 +418,8 @@ class GamificationServiceTest {
         assertEquals(LocalDate.now(), profile.getLastActivityDate());
         assertEquals(XpCalculator.XP_DAILY_LOGIN, profile.getXpPoints());
 
-        verify(xpTransactionRepository, times(1)).save(any(XpTransaction.class));
-        verify(gamificationProfileRepository, times(1)).save(profile);
+                verify(xpTransactionRepository, times(1)).saveAndFlush(any(XpTransaction.class));
+                verify(gamificationProfileRepository, times(1)).save(profile);
     }
 
     @Test
@@ -406,9 +430,10 @@ class GamificationServiceTest {
         profile.setLongestStreakDays((short) 3);
         profile.setLastActivityDate(LocalDate.now().minusDays(1));
 
-        when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
         when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
-        when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(xpTransactionRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+        when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         gamificationService.trackDailyLogin(userId);
 
@@ -425,9 +450,10 @@ class GamificationServiceTest {
         profile.setLongestStreakDays((short) 8);
         profile.setLastActivityDate(LocalDate.now().minusDays(3)); // gap of 3 days
 
-        when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
         when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
-        when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(xpTransactionRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+        when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         gamificationService.trackDailyLogin(userId);
 
@@ -446,9 +472,10 @@ class GamificationServiceTest {
         profile.setLongestStreakDays((short) 6);
         profile.setLastActivityDate(LocalDate.now().minusDays(1));
 
-        when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
         when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
-        when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(xpTransactionRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+        when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         gamificationService.trackDailyLogin(userId);
 
@@ -457,7 +484,7 @@ class GamificationServiceTest {
         assertEquals(XpCalculator.XP_DAILY_LOGIN + XpCalculator.XP_STREAK_BONUS, profile.getXpPoints());
 
         // Two transactions: daily login + streak bonus
-        verify(xpTransactionRepository, times(2)).save(any(XpTransaction.class));
+                verify(xpTransactionRepository, times(2)).saveAndFlush(any(XpTransaction.class));
     }
 
     @Test
@@ -467,81 +494,18 @@ class GamificationServiceTest {
         profile.setCurrentStreakDays((short) 4);
         profile.setLastActivityDate(LocalDate.now().minusDays(1));
 
-        when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
         when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
-        when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(xpTransactionRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+        when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         gamificationService.trackDailyLogin(userId);
 
         assertEquals(XpCalculator.XP_DAILY_LOGIN, profile.getXpPoints(),
                 "No streak bonus on a non-milestone day");
         // Only one transaction — no streak bonus
-        verify(xpTransactionRepository, times(1)).save(any(XpTransaction.class));
+        verify(xpTransactionRepository, times(1)).saveAndFlush(any(XpTransaction.class));
     }
-
-    /**
-     * Documents the KNOWN RACE CONDITION on trackDailyLogin.
-     * Two concurrent logins on the same day can both pass the guard and
-     * double-award XP. This test exposes the problem with a shared mutable profile.
-     * Fix: use optimistic locking (@Version on GamificationProfile) or an
-     * atomic conditional UPDATE query.
-     *
-     * NOTE: This is a best-effort concurrency test using unit-test mocks.
-     * A full integration test against a real DB is required to fully validate the fix.
-     */
-   
-@Test
-void trackDailyLogin_knownRaceCondition_concurrentCallsCanDoubleAwardXp()
-        throws Exception {
-    UUID userId = UUID.randomUUID();
-    GamificationProfile sharedProfile = profile(userId);
-    sharedProfile.setLastActivityDate(LocalDate.now().minusDays(1));
-
-    when(gamificationProfileRepository.findByUserId(userId))
-            .thenReturn(Optional.of(sharedProfile));
-    when(userRepository.getReferenceById(userId))
-            .thenReturn(User.builder().id(userId).build());
-
-    // ❌ REMOVE this line — overridden by doAnswer below, never actually used
-    // when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-
-    // ❌ REMOVE this line — overridden by doAnswer below, never actually used
-    // when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-
-    AtomicInteger xpTransactionsSaved = new AtomicInteger(0);
-
-    //  KEEP — this is the only stub needed for xpTransactionRepository
-    doAnswer(invocation -> {
-        xpTransactionsSaved.incrementAndGet();
-        return invocation.getArgument(0);
-    }).when(xpTransactionRepository).save(any(XpTransaction.class));
-
-    // ADD — gamificationProfileRepository.save still needs a stub, use doAnswer too
-    doAnswer(invocation -> invocation.getArgument(0))
-            .when(gamificationProfileRepository).save(any(GamificationProfile.class));
-
-    CountDownLatch startGate = new CountDownLatch(1);
-    ExecutorService pool = Executors.newFixedThreadPool(2);
-
-    Future<?> t1 = pool.submit(() -> {
-        try { startGate.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-        gamificationService.trackDailyLogin(userId);
-        return null;
-    });
-    Future<?> t2 = pool.submit(() -> {
-        try { startGate.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-        gamificationService.trackDailyLogin(userId);
-        return null;
-    });
-
-    startGate.countDown();
-    t1.get();
-    t2.get();
-    pool.shutdown();
-
-    assertTrue(xpTransactionsSaved.get() >= 1,
-            "At least one XpTransaction should be saved");
-}
     // ═══════════════════════════════════════════════════════════════════════════
     // getProfile
     // ═══════════════════════════════════════════════════════════════════════════

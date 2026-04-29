@@ -19,7 +19,15 @@ import java.util.UUID;
  * {@code referenceType}.
  */
 @Entity
-@Table(name = "xp_transactions")
+@Table(
+    name = "xp_transactions",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uq_xp_transactions_event_key", columnNames = "event_key")
+    },
+    indexes = {
+        @Index(name = "idx_xp_transactions_user_event", columnList = "user_id,event_type"),
+        @Index(name = "idx_xp_transactions_created_at", columnList = "created_at")
+    })
 @Getter
 @Setter
 @NoArgsConstructor
@@ -42,6 +50,16 @@ public class XpTransaction {
      */
     @Column(name = "event_type", nullable = false, length = 50)
     private String eventType;
+
+    /**
+     * Idempotency key for the logical event being recorded.
+     *
+     * <p>
+     * Enforced unique at the DB level to prevent duplicate XP awards when the
+     * same action is processed twice (retries, races, or double-clicks).
+     */
+    @Column(name = "event_key", nullable = false, length = 200)
+    private String eventKey;
 
     /** Positive = XP earned; negative = XP deducted. */
     @Column(name = "xp_delta", nullable = false)

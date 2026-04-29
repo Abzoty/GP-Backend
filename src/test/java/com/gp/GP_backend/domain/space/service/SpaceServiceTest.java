@@ -55,7 +55,6 @@ class SpaceServiceTest {
         Space space = Space.builder().id(spaceId).memberCount(1).build();
 
         when(spaceRepository.findById(spaceId)).thenReturn(Optional.of(space));
-        when(membershipRepository.existsBySpaceIdAndUserId(spaceId, userId)).thenReturn(false);
         when(membershipRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
 
         ApiException ex = assertThrows(ApiException.class, () -> spaceService.joinSpace(spaceId, user));

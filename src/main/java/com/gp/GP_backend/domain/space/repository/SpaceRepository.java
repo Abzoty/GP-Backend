@@ -5,7 +5,9 @@ import com.gp.GP_backend.domain.space.entity.SpaceCategory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -47,4 +49,14 @@ public interface SpaceRepository extends JpaRepository<Space, UUID> {
     List<Space> findAllActiveSpaces();
 
     Optional<Space> findById(UUID id);
+
+    /** Atomically increments memberCount to avoid lost updates under concurrency. */
+    @Modifying
+    @Query("UPDATE Space s SET s.memberCount = s.memberCount + 1 WHERE s.id = :spaceId")
+    int incrementMemberCount(@Param("spaceId") UUID spaceId);
+
+    /** Atomically decrements memberCount, guarding against negative values. */
+    @Modifying
+    @Query("UPDATE Space s SET s.memberCount = CASE WHEN s.memberCount > 0 THEN s.memberCount - 1 ELSE 0 END WHERE s.id = :spaceId")
+    int decrementMemberCount(@Param("spaceId") UUID spaceId);
 }

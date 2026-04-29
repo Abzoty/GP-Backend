@@ -68,6 +68,8 @@ public final class XpCalculator {
     public static final String REF_ANSWER = "ANSWER";
     public static final String REF_MATERIAL = "MATERIAL";
     public static final String REF_LOGIN = "LOGIN";
+    public static final String REF_VOTE = "VOTE";
+    public static final String REF_BOOKMARK = "BOOKMARK";
 
     // ─── Streak milestones that trigger a bonus ───────────────────────────────
 

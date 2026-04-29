@@ -86,14 +86,16 @@ public class VoteService {
                                 .build();
 
                 try {
-                        voteRepository.save(newVote);
-                                        // Award the post's author, not the voter
-                gamificationService.awardXp(
-                                authorId, // already resolved above
-                                XpCalculator.EVENT_GOOD_QUESTION,
-                                XpCalculator.XP_GOOD_QUESTION,
-                                postId,
-                                XpCalculator.REF_POST);
+                        Vote savedVote = voteRepository.save(newVote);
+                        // Award the post's author, not the voter.
+                        // Use the vote ID as reference to allow multiple users to vote
+                        // on the same post while still being idempotent per vote.
+                        gamificationService.awardXp(
+                                        authorId,
+                                        XpCalculator.EVENT_GOOD_QUESTION,
+                                        XpCalculator.XP_GOOD_QUESTION,
+                                        savedVote.getId(),
+                                        XpCalculator.REF_VOTE);
                 } catch (DataIntegrityViolationException ex) {
                         throw new ApiException(HttpStatus.CONFLICT, "User has already voted on this question");
                 }
@@ -138,18 +140,93 @@ public class VoteService {
                                 .build();
 
                 try {
-                        voteRepository.save(newVote);
-                // Award the answer's author, not the voter
-                gamificationService.awardXp(
-                                authorId, // already resolved above
-                                XpCalculator.EVENT_ANSWER_UPVOTED,
-                                XpCalculator.XP_ANSWER_UPVOTED,
-                                answerId,
-                                XpCalculator.REF_ANSWER);
+                        Vote savedVote = voteRepository.save(newVote);
+                        // Award the answer's author, not the voter.
+                        // Use the vote ID as reference to allow multiple users to upvote
+                        // the same answer while still being idempotent per vote.
+                        gamificationService.awardXp(
+                                        authorId,
+                                        XpCalculator.EVENT_ANSWER_UPVOTED,
+                                        XpCalculator.XP_ANSWER_UPVOTED,
+                                        savedVote.getId(),
+                                        XpCalculator.REF_VOTE);
                 } catch (DataIntegrityViolationException ex) {
                         throw new ApiException(HttpStatus.CONFLICT, "User has already voted on this answer");
                 }
 
+                return true;
+        }
+
+        @Transactional
+        public boolean removeGoodQuestion(UUID postId, User user) {
+                UUID spaceId = postRepository.findSpaceIdByPostId(postId);
+                Space space = spaceRepository.findById(spaceId)
+                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Space not found"));
+                if (!space.getIsActive()) {
+                        throw new ApiException(HttpStatus.BAD_REQUEST, "Cannot vote in an inactive space");
+                }
+                boolean isMember = spaceMembershipRepository
+                                .existsBySpaceIdAndUserId(spaceId, user.getId());
+                if (!isMember) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                        "User must be a member of the space to vote");
+                }
+
+                Vote vote = voteRepository
+                                .findByTargetIdAndTargetTypeAndUserId(postId, TargetType.QUESTION, user.getId())
+                                .orElse(null);
+                if (vote == null) {
+                        return true;
+                }
+
+                postRepository.decrementGoodQuestionCount(postId);
+
+                UUID authorId = postRepository.findAuthorIdByPostId(postId);
+                gamificationService.revokeXp(
+                                authorId,
+                                XpCalculator.EVENT_GOOD_QUESTION,
+                                vote.getId(),
+                                XpCalculator.REF_VOTE);
+
+                voteRepository.delete(vote);
+                return true;
+        }
+
+        @Transactional
+        public boolean removeUpvote(UUID answerId, User user) {
+                Answer answer = answerRepository.findById(answerId)
+                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Answer not found"));
+                UUID postId = answer.getPostId();
+                UUID spaceId = postRepository.findSpaceIdByPostId(postId);
+                Space space = spaceRepository.findById(spaceId)
+                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Space not found"));
+                if (!space.getIsActive()) {
+                        throw new ApiException(HttpStatus.BAD_REQUEST, "Cannot vote in an inactive space");
+                }
+                boolean isMember = spaceMembershipRepository
+                                .existsBySpaceIdAndUserId(spaceId, user.getId());
+                if (!isMember) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                        "User must be a member of the space to vote");
+                }
+
+                Vote vote = voteRepository
+                                .findByTargetIdAndTargetTypeAndUserId(answerId, TargetType.ANSWER, user.getId())
+                                .orElse(null);
+                if (vote == null) {
+                        return true;
+                }
+
+                answerRepository.decrementUpvoteCount(answerId);
+
+                UUID authorId = answer.getAuthorId();
+                gamificationService.revokeXp(
+                                authorId,
+                                XpCalculator.EVENT_ANSWER_UPVOTED,
+                                vote.getId(),
+                                XpCalculator.REF_VOTE);
+
+                voteRepository.delete(vote);
                 return true;
         }
 

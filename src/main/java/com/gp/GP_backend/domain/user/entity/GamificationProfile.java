@@ -83,11 +83,11 @@ public class GamificationProfile {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // /**
-    //  * Optimistic-lock version to prevent lost updates under concurrent XP writes.
-    //  */
-    // @Version
-    // @Column(name = "version", nullable = false)
-    // @Builder.Default
-    // private Long version = 0L;
+    /**
+     * Optimistic-lock version to prevent lost updates under concurrent XP writes.
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    @Builder.Default
+    private Long version = 0L;
 }

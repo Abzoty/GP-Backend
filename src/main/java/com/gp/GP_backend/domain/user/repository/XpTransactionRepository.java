@@ -4,6 +4,7 @@ import com.gp.GP_backend.domain.user.entity.XpTransaction;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -19,6 +20,7 @@ public interface XpTransactionRepository extends JpaRepository<XpTransaction, UU
     /** Full XP history for a user, newest first. */
     List<XpTransaction> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
-    // /** Fast dedup check for idempotent XP writes. */
-    // boolean existsByEventKey(String eventKey);
+    /** Fast dedup check for idempotent XP writes. */
+    boolean existsByEventKey(String eventKey);
+    Optional<XpTransaction> findByEventKey(String eventKey);
 }

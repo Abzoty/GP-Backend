@@ -68,6 +68,11 @@ class VoteServiceTest {
         when(postRepository.findAuthorIdByPostId(postId)).thenReturn(authorId);
         when(voteRepository.existsByTargetIdAndTargetTypeAndUserId(postId, TargetType.QUESTION, voter.getId()))
             .thenReturn(false);
+        when(voteRepository.save(any())).thenAnswer(invocation -> {
+            com.gp.GP_backend.domain.post.entity.Vote vote = invocation.getArgument(0);
+            vote.setId(UUID.randomUUID());
+            return vote;
+        });
 
         boolean result = voteService.markGoodQuestion(postId, voter);
 
@@ -178,6 +183,11 @@ class VoteServiceTest {
         when(spaceMembershipRepository.existsBySpaceIdAndUserId(spaceId, voter.getId())).thenReturn(true);
         when(voteRepository.existsByTargetIdAndTargetTypeAndUserId(answerId, TargetType.ANSWER, voter.getId()))
                 .thenReturn(false);
+        when(voteRepository.save(any())).thenAnswer(invocation -> {
+            com.gp.GP_backend.domain.post.entity.Vote vote = invocation.getArgument(0);
+            vote.setId(UUID.randomUUID());
+            return vote;
+        });
 
         boolean result = voteService.upvoteGoodAnswer(answerId, voter);
 

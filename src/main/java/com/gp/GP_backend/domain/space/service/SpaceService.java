@@ -176,10 +176,6 @@ public class SpaceService {
     public MembershipResponse joinSpace(UUID spaceId, User user) {
         Space space = requireSpace(spaceId);
 
-        if (membershipRepository.existsBySpaceIdAndUserId(spaceId, user.getId())) {
-            throw new ApiException(HttpStatus.CONFLICT, "You are already a member of this space");
-        }
-
         SpaceMembership membership = SpaceMembership.builder()
                 .space(space)
                 .user(user)
@@ -191,8 +187,7 @@ public class SpaceService {
             throw new ApiException(HttpStatus.CONFLICT, "You are already a member of this space");
         }
 
-        space.setMemberCount(space.getMemberCount() + 1);
-        spaceRepository.save(space);
+        spaceRepository.incrementMemberCount(spaceId);
 
         return toMembershipResponse(membership);
     }
@@ -235,8 +230,7 @@ public class SpaceService {
 
         membershipRepository.delete(membership);
 
-        space.setMemberCount(Math.max(0, space.getMemberCount() - 1));
-        spaceRepository.save(space);
+        spaceRepository.decrementMemberCount(spaceId);
     }
 
     // ─── Edit ─────────────────────────────────────────────────────────────────

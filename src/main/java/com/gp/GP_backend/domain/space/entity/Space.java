@@ -15,7 +15,11 @@ import java.util.UUID;
  * all other categories use text-similarity on {@code name + description}.
  */
 @Entity
-@Table(name = "spaces")
+@Table(
+    name = "spaces",
+    indexes = {
+        @Index(name = "idx_spaces_category_active", columnList = "category,is_active")
+    })
 @Getter
 @Setter
 @NoArgsConstructor

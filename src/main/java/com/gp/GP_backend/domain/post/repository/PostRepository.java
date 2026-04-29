@@ -31,6 +31,10 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
     @Query("UPDATE Post p SET p.goodQuestionCount = p.goodQuestionCount + 1 WHERE p.id = :id")
     void incrementGoodQuestionCount(@Param("id") UUID id);
 
+    @Modifying
+    @Query("UPDATE Post p SET p.goodQuestionCount = CASE WHEN p.goodQuestionCount > 0 THEN p.goodQuestionCount - 1 ELSE 0 END WHERE p.id = :id")
+    void decrementGoodQuestionCount(@Param("id") UUID id);
+
     /** Answer count for a single post — used when building PostResponse. */
     @Query("SELECT COUNT(a) FROM Answer a WHERE a.postId = :postId")
     int countAnswersByPostId(@Param("postId") UUID postId);
@@ -42,8 +46,16 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
     UUID findAuthorIdByPostId(@Param("postId") UUID postId);
 
     @Modifying
+    @Query("UPDATE Post p SET p.isSolved = true, p.acceptedAnswerId = :answerId WHERE p.id = :postId AND p.isSolved = false")
+    int markAsSolved(@Param("postId") UUID postId, @Param("answerId") UUID answerId);
+
+    @Modifying
     @Query("UPDATE Post p SET p.isSolved = true, p.acceptedAnswerId = :answerId WHERE p.id = :postId")
-    void markAsSolved(@Param("postId") UUID postId, @Param("answerId") UUID answerId);
+    int setAcceptedAnswer(@Param("postId") UUID postId, @Param("answerId") UUID answerId);
+
+    @Modifying
+    @Query("UPDATE Post p SET p.isSolved = false, p.acceptedAnswerId = null WHERE p.id = :postId")
+    int clearSolved(@Param("postId") UUID postId);
 
     @Query("SELECT s.name FROM Post p JOIN Space s ON p.spaceId = s.id WHERE p.id = :postId")
     String findSpaceNameByPostId(UUID postId);

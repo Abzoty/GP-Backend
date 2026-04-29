@@ -131,25 +131,26 @@ try{
         if (materialLinkRepository.existsByMaterialIdAndUserId(materialId, user.getId())) {
             throw new ApiException(HttpStatus.CONFLICT, "You have already bookmarked this material");
         }
-
         MaterialLink link = MaterialLink.builder()
                 .material(material)
                 .user(user)
                 .build();
         try {
-            materialLinkRepository.save(link);
+            MaterialLink savedLink = materialLinkRepository.save(link);
 
             materialLinkRepository.incrementLinkCount(materialId);
 
             // Award the material owner only when another user bookmarks it.
             UUID ownerId = material.getUploadedBy().getId();
             if (!ownerId.equals(user.getId())) {
+                // Use the bookmark row ID as reference so multiple different users
+                // can bookmark the same material and each award XP once.
                 gamificationService.awardXp(
                         ownerId,
                         XpCalculator.EVENT_MATERIAL_LINKED,
                         XpCalculator.XP_MATERIAL_LINKED,
-                        materialId,
-                        XpCalculator.REF_MATERIAL);
+                        savedLink.getId(),
+                        XpCalculator.REF_BOOKMARK);
             }
         } catch (DataIntegrityViolationException ex) {
             throw new ApiException(HttpStatus.CONFLICT, "You have already bookmarked this material");
@@ -166,6 +167,15 @@ try{
         MaterialLink link = materialLinkRepository.findByMaterialIdAndUserId(materialId, user.getId())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                         "You have not bookmarked this material"));
+
+        UUID ownerId = material.getUploadedBy().getId();
+        if (!ownerId.equals(user.getId())) {
+            gamificationService.revokeXp(
+                ownerId,
+                XpCalculator.EVENT_MATERIAL_LINKED,
+                link.getId(),
+                XpCalculator.REF_BOOKMARK);
+        }
 
         materialLinkRepository.delete(link);
 
@@ -208,6 +218,12 @@ try{
             throw new ApiException(HttpStatus.FORBIDDEN,
                     "Only the uploader can delete this material");
         }
+
+        gamificationService.revokeXp(
+            material.getUploadedBy().getId(),
+            XpCalculator.EVENT_MATERIAL_SHARED,
+            materialId,
+            XpCalculator.REF_MATERIAL);
 
         // 1. Remove all bookmarks (cascade-clean the material_links table)
         materialLinkRepository.deleteByMaterialId(materialId);

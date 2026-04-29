@@ -93,6 +93,20 @@ public class PostController {
                 .body(ApiResponse.ok("Post marked as good question", null));
     }
 
+    @DeleteMapping("/api/v1/posts/{postId}/votes/good-question")
+    @Operation(summary = "remove good-question vote")
+    public ResponseEntity<ApiResponse<?>> removeGoodQuestion(
+            @PathVariable UUID postId,
+            @AuthenticationPrincipal User user) {
+        boolean isDone = voteService.removeGoodQuestion(postId, user);
+        if (!isDone) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Unable to remove good question vote");
+        }
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.ok("Good question vote removed", null));
+    }
+
     @PutMapping("/api/v1/spaces/posts/{postId}")
     @Operation(summary = "Edit an existing post")
     // TODO: return the new post content in the response body
@@ -138,6 +152,20 @@ public class PostController {
                 .body(ApiResponse.ok("Post marked as solved", null));
     }
 
+    @DeleteMapping("/api/v1/posts/{postId}/accepted-answer")
+    @Operation(summary = "unmark post as solved")
+    public ResponseEntity<ApiResponse<?>> unmarkPostAsSolved(
+            @PathVariable UUID postId,
+            @AuthenticationPrincipal User user) {
+        boolean isDone = postService.unmarkQuestionAsSolved(postId, user);
+        if (!isDone) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Unable to unmark post as solved");
+        }
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.ok("Post unmarked as solved", null));
+    }
+
     @RequestMapping(
         value = { "/api/v1/spaces/posts/answers/{answerId}", "/api/v1/answers/{answerId}/votes/upvote" },
         method = { RequestMethod.POST, RequestMethod.PATCH })
@@ -152,6 +180,20 @@ public class PostController {
         return ResponseEntity
                 .status(HttpStatus.OK)
                 .body(ApiResponse.ok("Answer upvoted successfully", null));
+    }
+
+    @DeleteMapping("/api/v1/answers/{answerId}/votes/upvote")
+    @Operation(summary = "remove upvote from answer")
+    public ResponseEntity<ApiResponse<?>> removeUpvote(
+            @PathVariable UUID answerId,
+            @AuthenticationPrincipal User user) {
+        boolean isDone = voteService.removeUpvote(answerId, user);
+        if (!isDone) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Unable to remove upvote");
+        }
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.ok("Upvote removed successfully", null));
     }
 
     // ─── Get a single post ────────────────────────────────────────────────────

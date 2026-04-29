@@ -148,13 +148,16 @@ class MaterialServiceTest {
 
         when(materialRepository.findById(materialId)).thenReturn(Optional.of(material));
         when(spaceMembershipRepository.existsBySpaceIdAndUserId(material.getSpace().getId(), user.getId())).thenReturn(true);
-        when(materialLinkRepository.existsByMaterialIdAndUserId(materialId, user.getId())).thenReturn(false);
+        when(materialLinkRepository.save(any(MaterialLink.class))).thenAnswer(invocation -> {
+            MaterialLink link = invocation.getArgument(0);
+            link.setId(UUID.randomUUID());
+            return link;
+        });
 
         materialService.bookmark(materialId, user);
 
-        assertEquals(1, material.getLinkCount());
         verify(materialLinkRepository).save(any(MaterialLink.class));
-        verify(materialRepository).save(material);
+        verify(materialLinkRepository).incrementLinkCount(materialId);
     }
 
     @Test
@@ -166,12 +169,13 @@ class MaterialServiceTest {
 
         when(materialRepository.findById(materialId)).thenReturn(Optional.of(material));
         when(spaceMembershipRepository.existsBySpaceIdAndUserId(material.getSpace().getId(), user.getId())).thenReturn(true);
-        when(materialLinkRepository.existsByMaterialIdAndUserId(materialId, user.getId())).thenReturn(true);
+        when(materialLinkRepository.save(any(MaterialLink.class)))
+            .thenThrow(new DataIntegrityViolationException("duplicate"));
 
         ApiException ex = assertThrows(ApiException.class, () -> materialService.bookmark(materialId, user));
 
         assertEquals(HttpStatus.CONFLICT, ex.getStatus());
-        verify(materialLinkRepository, never()).save(any(MaterialLink.class));
+        verify(materialLinkRepository, never()).incrementLinkCount(any());
     }
 
     @Test
@@ -183,13 +187,13 @@ class MaterialServiceTest {
 
         when(materialRepository.findById(materialId)).thenReturn(Optional.of(material));
         when(spaceMembershipRepository.existsBySpaceIdAndUserId(material.getSpace().getId(), user.getId())).thenReturn(true);
-        when(materialLinkRepository.existsByMaterialIdAndUserId(materialId, user.getId())).thenReturn(false);
         when(materialLinkRepository.save(any(MaterialLink.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate"));
 
         ApiException ex = assertThrows(ApiException.class, () -> materialService.bookmark(materialId, user));
 
         assertEquals(HttpStatus.CONFLICT, ex.getStatus());
+        verify(materialLinkRepository, never()).incrementLinkCount(any());
     }
 
     @Test
@@ -201,7 +205,11 @@ class MaterialServiceTest {
 
         when(materialRepository.findById(materialId)).thenReturn(Optional.of(material));
         when(spaceMembershipRepository.existsBySpaceIdAndUserId(material.getSpace().getId(), user.getId())).thenReturn(true);
-        when(materialLinkRepository.existsByMaterialIdAndUserId(materialId, user.getId())).thenReturn(false);
+        when(materialLinkRepository.save(any(MaterialLink.class))).thenAnswer(invocation -> {
+            MaterialLink link = invocation.getArgument(0);
+            link.setId(UUID.randomUUID());
+            return link;
+        });
 
         materialService.bookmark(materialId, user);
 
