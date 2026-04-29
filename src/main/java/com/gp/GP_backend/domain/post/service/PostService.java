@@ -4,6 +4,7 @@ import com.gp.GP_backend.domain.post.dto.CreateAnswerRequest;
 import com.gp.GP_backend.domain.post.dto.CreatePostRequest;
 import com.gp.GP_backend.domain.post.dto.EditAnswerRequest;
 import com.gp.GP_backend.domain.post.dto.EditPostRequest;
+import com.gp.GP_backend.domain.notification.service.NotificationService;
 import com.gp.GP_backend.domain.post.dto.AllPostsResponse;
 import com.gp.GP_backend.domain.post.dto.AnswerResponse;
 import com.gp.GP_backend.domain.post.dto.PostResponse;
@@ -73,6 +74,7 @@ public class PostService {
         private final SpaceRepository spaceRepository;
         private final VoteRepository voteRepository;
         private final GamificationService gamificationService;
+        private final NotificationService notificationService;
         // private final GamificationService gamificationService;
 
         // NotificationService is injected optionally so the feature compiles even
@@ -120,8 +122,8 @@ public class PostService {
                                 .body(request.getBody())
                                 .createdAt(LocalDateTime.now())
                                 .build();
-
                 Post saved = postRepository.save(post);
+                notificationService.notifyNewPostCreated(saved, author);
                 log.debug("Post created: id={}, spaceId={}, authorId={}", saved.getId(), spaceId, author.getId());
 
                 // Award XP to the author — same transaction
@@ -229,6 +231,8 @@ public class PostService {
                 Answer saved = answerRepository.save(answer);
                 log.debug("Answer created: id={}, postId={}, authorId={}", saved.getId(), postId, author.getId());
 
+                notificationService.notifyNewAnswer(post, saved, author);
+
                 // Award XP to the answerer — same transaction
                 gamificationService.awardXp(
                                 author.getId(),
@@ -264,6 +268,8 @@ public class PostService {
                 }
                 answerRepository.markAsAccepted(answerId);
                 postRepository.markAsSolved(postId, answerId);
+
+                notificationService.notifyAnswerAccepted(answerId);
 
                 // Award the answerer for having their answer accepted
                 UUID answerAuthorId = answer.getAuthorId();

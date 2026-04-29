@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import com.gp.GP_backend.domain.post.entity.Vote;
 import com.gp.GP_backend.domain.post.entity.VoteType;
+import com.gp.GP_backend.domain.notification.service.NotificationService;
 import com.gp.GP_backend.domain.post.entity.TargetType;
 import com.gp.GP_backend.domain.post.repository.AnswerRepository;
 import com.gp.GP_backend.domain.post.repository.PostRepository;
@@ -50,6 +51,7 @@ public class VoteService {
         private final SpaceRepository spaceRepository;
         private final SpaceMembershipRepository spaceMembershipRepository;
         private final GamificationService gamificationService;
+        private final NotificationService notificationService;
 
         @Transactional
         public boolean markGoodQuestion(UUID postId, User user) {
@@ -79,6 +81,7 @@ public class VoteService {
                                 .createdAt(LocalDateTime.now())
                                 .build();
                 voteRepository.save(newVote);
+                notificationService.notifyGoodQuestionMarked(postId, user);
 
                 // Award the post's author, not the voter
                 gamificationService.awardXp(
@@ -121,6 +124,7 @@ public class VoteService {
                                 .createdAt(LocalDateTime.now())
                                 .build();
                 voteRepository.save(newVote);
+                notificationService.notifyUpvoteAnswerReceived(answerId, user);
 
                 // Award the answer's author, not the voter
                 gamificationService.awardXp(
