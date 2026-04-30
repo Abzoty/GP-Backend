@@ -23,9 +23,17 @@ public class RegisterRequest {
     private String email;
 
     @NotBlank
+    @Pattern(
+        regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&]).{8,}$",
+        message = "Password must be at least 8 chars, include upper, lower, number, and special char"
+    )
     @Size(min = 8, message = "Password must be at least 8 characters")
     private String password;
 
+    @Pattern(
+        regexp = "^\\d{8}$",
+        message = "Student ID must be exactly 8 digits"
+    )
     /** Optional — not required for registration but must be unique if provided. */
     private String studentId;
 

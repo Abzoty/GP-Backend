@@ -71,7 +71,7 @@ public class NotificationController {
 
 
     @PutMapping("/api/v1/notifications/toggle-inapp")
-    @Operation(summary = "Toggle email notifications")
+    @Operation(summary = "Toggle in-app notifications")
     public ResponseEntity<ApiResponse<Void>>toggleAppNotificationAvailability(
             @AuthenticationPrincipal User user
     ) {
