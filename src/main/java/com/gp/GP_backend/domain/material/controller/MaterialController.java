@@ -26,7 +26,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.UUID;
 
-
 @RestController
 @RequestMapping("/api/v1/materials")
 @RequiredArgsConstructor
@@ -58,10 +57,11 @@ public class MaterialController {
     @PostMapping("/link")
     @Operation(summary = "Share an external link in a space")
     public ResponseEntity<ApiResponse<MaterialResponse>> shareLink(
+            @RequestParam UUID spaceId,
             @Valid @RequestBody ShareLinkRequest request,
             @AuthenticationPrincipal User user) {
 
-        MaterialResponse response = materialService.shareLink(request, user);
+        MaterialResponse response = materialService.shareLink(spaceId, request, user);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Link shared successfully", response));
     }
@@ -170,6 +170,42 @@ public class MaterialController {
 
         List<MaterialResponse> materials = materialService.getBookmarkedMaterials(spaceId, user);
         return ResponseEntity.ok(ApiResponse.ok("Bookmarked materials retrieved", materials));
+    }
+
+    // ─── Search ───────────────────────────────────────────────────────────────
+
+    /**
+     * Searches materials within a space by title or description, with optional
+     * resource-type filter and configurable sort.
+     *
+     * <p>
+     * Caller must be a member of the space.
+     *
+     * @param spaceId      the space to search within.
+     * @param query        substring matched against title and description.
+     * @param resourceType filter by type: {@code "PDF"}, {@code "DOCX"},
+     *                     {@code "TXT"}, {@code "MD"}, {@code "DOC"},
+     *                     or {@code "LINK"}.
+     * @param sortBy       {@code "linkCount"} or {@code "createdAt"} (default).
+     * @param sortDir      {@code "asc"} or {@code "desc"} (default).
+     * @param page         zero-based page index (default 0).
+     * @param size         page size (default 20).
+     */
+    @GetMapping("/space/{spaceId}/search")
+    @Operation(summary = "Search materials in a space by title/description with optional type filter and sort")
+    public ResponseEntity<ApiResponse<List<MaterialResponse>>> searchMaterials(
+            @PathVariable UUID spaceId,
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) String resourceType,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal User user) {
+
+        List<MaterialResponse> results = materialService.searchMaterials(
+                spaceId, query, resourceType, sortBy, sortDir, page, size, user);
+        return ResponseEntity.ok(ApiResponse.ok("Materials retrieved", results));
     }
 
     // ─── Private helpers ──────────────────────────────────────────────────────

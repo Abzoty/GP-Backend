@@ -13,13 +13,14 @@ import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.shared.exception.ApiException;
 import com.gp.GP_backend.shared.util.SlugUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
-
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +31,9 @@ public class SpaceService {
 
     /** Role string assigned to users who join a space voluntarily. */
     private static final String ROLE_MEMBER = "MEMBER";
+
+    /** Valid sort fields for space search. */
+    private static final Set<String> SPACE_SORT_FIELDS = Set.of("memberCount", "createdAt");
 
     private final SpaceRepository spaceRepository;
     private final SpaceMembershipRepository membershipRepository;
@@ -237,7 +241,7 @@ public class SpaceService {
      *
      * @param spaceId   the UUID of the space to update.
      * @param request   the partial update payload (null fields are ignored).
-     * @param requester the authenticated user.
+     * @param requester the authenticated user performing the update.
      * @return the updated space as a response DTO.
      * @throws ApiException 404 if the space does not exist.
      * @throws ApiException 403 if the requester is not an admin of the space.
@@ -291,6 +295,47 @@ public class SpaceService {
         return toMembershipResponse(membershipRepository.save(targetMembership));
     }
 
+    // ─── Search ───────────────────────────────────────────────────────────────
+
+    /**
+     * Searches all active spaces with optional text filter, category filter,
+     * and configurable sort over {@code memberCount} or {@code createdAt}.
+     *
+     * @param query    substring matched against name and description; {@code null}
+     *                 or
+     *                 blank means no text filter.
+     * @param category optional category filter; {@code null} means all categories.
+     * @param sortBy   field to sort by — {@code "memberCount"} or
+     *                 {@code "createdAt"}
+     *                 (default: {@code "createdAt"}).
+     * @param sortDir  {@code "asc"} or {@code "desc"} (default: {@code "desc"}).
+     * @param page     zero-based page index.
+     * @param size     page size.
+     * @return matching spaces as a list of {@link SpaceResponse}s.
+     */
+    @Transactional(readOnly = true)
+    public List<SpaceResponse> searchSpaces(
+            String query,
+            SpaceCategory category,
+            String sortBy,
+            String sortDir,
+            int page,
+            int size) {
+
+        Sort sort = buildSort(sortBy, sortDir, SPACE_SORT_FIELDS);
+        PageRequest pageable = PageRequest.of(page, size, sort);
+
+        // Normalise blank query to null so the JPQL IS NULL check skips the filter
+        String normalizedQuery = (query == null || query.isBlank()) ? null : query.trim();
+
+        return spaceRepository
+                .searchSpaces(normalizedQuery, category, pageable)
+                .getContent()
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
     // ─── Private helpers ──────────────────────────────────────────────────────
 
     /**
@@ -321,6 +366,22 @@ public class SpaceService {
     }
 
     /**
+     * Builds a {@link Sort} from the supplied field name and direction, falling
+     * back to {@code createdAt DESC} for unknown values.
+     *
+     * @param sortBy      requested sort field.
+     * @param sortDir     {@code "asc"} or {@code "desc"}.
+     * @param validFields set of accepted field names for this domain.
+     */
+    private Sort buildSort(String sortBy, String sortDir, Set<String> validFields) {
+        Sort.Direction direction = "asc".equalsIgnoreCase(sortDir)
+                ? Sort.Direction.ASC
+                : Sort.Direction.DESC;
+        String field = (sortBy != null && validFields.contains(sortBy)) ? sortBy : "createdAt";
+        return Sort.by(direction, field);
+    }
+
+    /**
      * Generates a unique slug for the given name, excluding {@code excludeSpaceId}
      * from the uniqueness check (used during updates so the space's own slug is
      * not treated as a conflict).
@@ -348,7 +409,7 @@ public class SpaceService {
 
     @Transactional
     public SpaceResponse getSpaceById(UUID spaceId, UUID userId) {
-        if (isMemberInSpace(spaceId, userId)){
+        if (isMemberInSpace(spaceId, userId)) {
             Space space = requireSpace(spaceId);
             return toResponse(space);
         }

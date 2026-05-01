@@ -29,6 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -58,12 +60,8 @@ import java.util.UUID;
 @Slf4j
 public class PostService {
 
-        // ─── XP constants (from product backlog §7.2) ─────────────────────────────
-        // private static final int XP_POST_CREATED = 10;
-        // private static final int XP_ANSWER_GIVEN = 15;
-
-        // private static final String EVENT_POST_CREATED = "POST_CREATED";
-        // private static final String EVENT_ANSWER_GIVEN = "ANSWER_GIVEN";
+        /** Valid sort fields for post search. */
+        private static final Set<String> POST_SORT_FIELDS = Set.of("goodQuestionCount", "createdAt");
 
         // ─── Dependencies ─────────────────────────────────────────────────────────
         private final PostRepository postRepository;
@@ -75,12 +73,6 @@ public class PostService {
         private final VoteRepository voteRepository;
         private final GamificationService gamificationService;
         private final NotificationService notificationService;
-        // private final GamificationService gamificationService;
-
-        // NotificationService is injected optionally so the feature compiles even
-        // before NotificationService is fully implemented (see its TODO stub).
-        // Switch to a required constructor injection once the service is complete.
-        // private final NotificationService notificationService;
 
         // ─── US-014: Create a question post ───────────────────────────────────────
 
@@ -241,14 +233,11 @@ public class PostService {
                                 saved.getId(),
                                 XpCalculator.REF_ANSWER);
 
-                // TODO: notify question author once NotificationService is implemented
-                // notificationService.notifyNewAnswer(post, saved, author);
-
                 String authorName = author.getFullName();
                 return toAnswerResponse(saved, authorName);
         }
 
-        // ======================= mark question as solver =========================
+        // ─── Mark question as solved ──────────────────────────────────────────────
 
         @Transactional
         public boolean markQuestionAsSolved(UUID postId, UUID answerId, User user) {
@@ -391,19 +380,70 @@ public class PostService {
                                 .findBySpaceIdOrderByCreatedAtDesc(spaceId, pageable);
 
                 return postPage.getContent().stream()
-                                .map(post -> {
-                                        return mapToAllPostsResponse(post);
-                                }).toList();
+                                .map(this::mapToAllPostsResponse)
+                                .toList();
+        }
+
+        // ─── Search ───────────────────────────────────────────────────────────────
+
+        /**
+         * Searches posts within a space by title or body, with optional solved filter
+         * and configurable sort over {@code goodQuestionCount} or {@code createdAt}.
+         *
+         * <p>
+         * Caller must be a member of the space.
+         *
+         * @param userId   the authenticated user's ID (membership is verified).
+         * @param spaceId  the space to search within.
+         * @param query    substring matched against title and body; {@code null} or
+         *                 blank means no text filter.
+         * @param isSolved {@code true} = only solved posts, {@code false} = only
+         *                 unsolved, {@code null} = all posts.
+         * @param sortBy   {@code "goodQuestionCount"} or {@code "createdAt"} (default).
+         * @param sortDir  {@code "asc"} or {@code "desc"} (default).
+         * @param page     zero-based page index.
+         * @param size     page size.
+         * @return matching posts mapped to {@link AllPostsResponse}.
+         */
+        @Transactional
+        public List<AllPostsResponse> searchPosts(
+                        UUID userId,
+                        UUID spaceId,
+                        String query,
+                        Boolean isSolved,
+                        String sortBy,
+                        String sortDir,
+                        int page,
+                        int size) {
+
+                if (!spaceRepository.existsById(spaceId)) {
+                        throw new ApiException(HttpStatus.NOT_FOUND,
+                                        "Space not found with id: " + spaceId);
+                }
+
+                boolean isMember = spaceMembershipRepository.existsBySpaceIdAndUserId(spaceId, userId);
+                if (!isMember) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                        "You must be a member of this space to view posts");
+                }
+
+                Sort sort = buildSort(sortBy, sortDir);
+                PageRequest pageable = PageRequest.of(page, size, sort);
+
+                String normalizedQuery = (query == null || query.isBlank()) ? null : query.trim();
+
+                return postRepository
+                                .searchPosts(spaceId, normalizedQuery, isSolved, pageable)
+                                .getContent()
+                                .stream()
+                                .map(this::mapToAllPostsResponse)
+                                .toList();
         }
 
         // ─── Mapping helpers ──────────────────────────────────────────────────────
 
         /**
          * Maps a {@link Post} entity to a {@link PostResponse}.
-         *
-         * <p>
-         * Tags are stored as a comma-separated string and split back into a list
-         * here so the client always receives a proper JSON array.
          */
         private PostResponse toPostResponse(Post post, String authorName, int answerCount) {
 
@@ -452,8 +492,7 @@ public class PostService {
                                                 HttpStatus.NOT_FOUND, "SPACE_NOT_FOUND",
                                                 "Space not found for post: " + post.getId()));
 
-                // 3. Fetch top 3 answers — accepted first, then by upvote count (already sorted
-                // by repo)
+                // 3. Fetch top 3 answers — accepted first, then by upvote count
                 List<AllPostsResponse.AnswerSummary> top3Answers = answerRepository
                                 .findByPostIdOrderByIsAcceptedDescUpvoteCountDescCreatedAtAsc(
                                                 post.getId(), PageRequest.of(0, 3))
@@ -508,5 +547,17 @@ public class PostService {
                                                 ? post.getUpdatedAt().toInstant(ZoneOffset.UTC)
                                                 : null)
                                 .build();
+        }
+
+        /**
+         * Builds a {@link Sort} from the supplied field name and direction, falling
+         * back to {@code createdAt DESC} for unknown values.
+         */
+        private Sort buildSort(String sortBy, String sortDir) {
+                Sort.Direction direction = "asc".equalsIgnoreCase(sortDir)
+                                ? Sort.Direction.ASC
+                                : Sort.Direction.DESC;
+                String field = (sortBy != null && POST_SORT_FIELDS.contains(sortBy)) ? sortBy : "createdAt";
+                return Sort.by(direction, field);
         }
 }

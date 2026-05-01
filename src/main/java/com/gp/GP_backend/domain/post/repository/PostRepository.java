@@ -53,4 +53,24 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
      */
     @Query("SELECT COUNT(p) FROM Post p WHERE p.spaceId = :spaceId AND p.authorId = :userId")
     int countBySpaceIdAndAuthorId(@Param("spaceId") UUID spaceId, @Param("userId") UUID userId);
+
+    /**
+     * Searches posts within a space by title or body with an optional solved
+     * filter.
+     * All parameters except {@code spaceId} are optional — passing {@code null}
+     * skips that filter.
+     * Sorting and pagination are driven by the supplied {@link Pageable}.
+     */
+    @Query("""
+            SELECT p FROM Post p
+            WHERE p.spaceId = :spaceId
+            AND (:query IS NULL OR LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%'))
+                OR LOWER(p.body) LIKE LOWER(CONCAT('%', :query, '%')))
+            AND (:isSolved IS NULL OR p.isSolved = :isSolved)
+            """)
+    Page<Post> searchPosts(
+            @Param("spaceId") UUID spaceId,
+            @Param("query") String query,
+            @Param("isSolved") Boolean isSolved,
+            Pageable pageable);
 }
