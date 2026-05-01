@@ -36,4 +36,10 @@ public interface MaterialLinkRepository extends JpaRepository<MaterialLink, UUID
         @Transactional
         @Query("DELETE FROM MaterialLink ml WHERE ml.material.id = :materialId")
         void deleteByMaterialId(@Param("materialId") UUID materialId);
+
+        // Fetches all bookmarks for a specific user out of a given list of materials in
+        // ONE query
+        @Query("SELECT ml.material.id FROM MaterialLink ml WHERE ml.user.id = :userId AND ml.material.id IN :materialIds")
+        java.util.Set<UUID> findBookmarkedMaterialIds(@Param("userId") UUID userId,
+                        @Param("materialIds") java.util.List<UUID> materialIds);
 }

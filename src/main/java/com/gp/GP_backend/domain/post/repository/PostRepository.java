@@ -64,8 +64,8 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
     @Query("""
             SELECT p FROM Post p
             WHERE p.spaceId = :spaceId
-            AND (:query IS NULL OR LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%'))
-                OR LOWER(p.body) LIKE LOWER(CONCAT('%', :query, '%')))
+            AND (:query IS NULL OR p.title LIKE CONCAT('%', :query, '%')
+                OR p.body LIKE CONCAT('%', :query, '%'))
             AND (:isSolved IS NULL OR p.isSolved = :isSolved)
             """)
     Page<Post> searchPosts(

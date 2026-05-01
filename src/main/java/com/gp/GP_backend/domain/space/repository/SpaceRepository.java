@@ -59,8 +59,8 @@ public interface SpaceRepository extends JpaRepository<Space, UUID> {
     @Query("""
             SELECT s FROM Space s
             WHERE s.isActive = true
-            AND (:query IS NULL OR LOWER(s.name) LIKE LOWER(CONCAT('%', :query, '%'))
-                OR LOWER(s.description) LIKE LOWER(CONCAT('%', :query, '%')))
+            AND (:query IS NULL OR s.name LIKE CONCAT('%', :query, '%')
+                OR s.description LIKE CONCAT('%', :query, '%'))
             AND (:category IS NULL OR s.category = :category)
             """)
     Page<Space> searchSpaces(

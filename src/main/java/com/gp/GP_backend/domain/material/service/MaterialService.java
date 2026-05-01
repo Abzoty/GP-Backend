@@ -234,57 +234,38 @@ public class MaterialService {
         @Transactional(readOnly = true)
         public List<MaterialResponse> getMaterialsBySpace(UUID spaceId, User user) {
                 requireMemberSpace(spaceId, user.getId());
-                UUID userId = user.getId();
-                return materialRepository.findBySpaceIdOrderByCreatedAtDesc(spaceId)
-                                .stream()
-                                .map(m -> toResponse(m,
-                                                materialLinkRepository.existsByMaterialIdAndUserId(m.getId(), userId)))
+
+                List<Material> materials = materialRepository.findBySpaceIdOrderByCreatedAtDesc(spaceId);
+                if (materials.isEmpty())
+                        return List.of();
+
+                // Fetch all bookmarks in one query
+                List<UUID> materialIds = materials.stream().map(Material::getId).toList();
+                Set<UUID> bookmarkedIds = materialLinkRepository.findBookmarkedMaterialIds(user.getId(), materialIds);
+
+                return materials.stream()
+                                .map(m -> toResponse(m, bookmarkedIds.contains(m.getId())))
                                 .toList();
         }
-
-        // Returns only the materials bookmarked by the requesting user in a specific
-        // space.
-        @Transactional(readOnly = true)
-        public List<MaterialResponse> getBookmarkedMaterials(UUID spaceId, User user) {
-                requireMemberSpace(spaceId, user.getId());
-                return materialLinkRepository.findByUserIdAndSpaceId(user.getId(), spaceId)
-                                .stream()
-                                .map(link -> toResponse(link.getMaterial(), true)) // isBookmarked always true here
-                                .toList();
-        }
-
-        // ─── Search ───────────────────────────────────────────────────────────────
 
         /**
-         * Searches materials within a space by title or description, with optional
-         * resource-type filter and configurable sort over {@code linkCount} or
-         * {@code createdAt}.
-         *
-         * <p>
-         * Caller must be a member of the space.
-         *
-         * @param spaceId      the space to search within.
-         * @param query        substring matched against title and description;
-         *                     {@code null} or blank means no text filter.
-         * @param resourceType optional filter — {@code "PDF"}, {@code "DOCX"},
-         *                     {@code "LINK"}, etc. {@code null} means all types.
-         * @param sortBy       {@code "linkCount"} or {@code "createdAt"} (default).
-         * @param sortDir      {@code "asc"} or {@code "desc"} (default).
-         * @param page         zero-based page index.
-         * @param size         page size.
-         * @param user         the authenticated user (membership is verified).
-         * @return matching materials with the caller's bookmark state populated.
+         * Searches materials in a space for title/description with optional filters for
+         * resource type, plus pagination and sorting. The isBookmarked flag on each item
+         * @param spaceId
+         * @param query
+         * @param resourceType
+         * @param sortBy
+         * @param sortDir
+         * @param page
+         * @param size
+         * @param user
+         * @return
          */
+
         @Transactional(readOnly = true)
         public List<MaterialResponse> searchMaterials(
-                        UUID spaceId,
-                        String query,
-                        String resourceType,
-                        String sortBy,
-                        String sortDir,
-                        int page,
-                        int size,
-                        User user) {
+                        UUID spaceId, String query, String resourceType,
+                        String sortBy, String sortDir, int page, int size, User user) {
 
                 requireMemberSpace(spaceId, user.getId());
 
@@ -295,13 +276,19 @@ public class MaterialService {
                 String normalizedType = (resourceType == null || resourceType.isBlank()) ? null
                                 : resourceType.trim().toUpperCase();
 
-                UUID userId = user.getId();
-                return materialRepository
+                List<Material> materials = materialRepository
                                 .searchMaterials(spaceId, normalizedQuery, normalizedType, pageable)
-                                .getContent()
-                                .stream()
-                                .map(m -> toResponse(m,
-                                                materialLinkRepository.existsByMaterialIdAndUserId(m.getId(), userId)))
+                                .getContent();
+
+                if (materials.isEmpty())
+                        return List.of();
+
+                // Fetch all bookmarks for this page in ONE query
+                List<UUID> materialIds = materials.stream().map(Material::getId).toList();
+                Set<UUID> bookmarkedIds = materialLinkRepository.findBookmarkedMaterialIds(user.getId(), materialIds);
+
+                return materials.stream()
+                                .map(m -> toResponse(m, bookmarkedIds.contains(m.getId())))
                                 .toList();
         }
 
@@ -361,5 +348,16 @@ public class MaterialService {
                                 .createdAt(m.getCreatedAt())
                                 .updatedAt(m.getUpdatedAt())
                                 .build();
+        }
+
+        // Returns only the materials bookmarked by the requesting user in a specific
+        // space.
+        @Transactional(readOnly = true)
+        public List<MaterialResponse> getBookmarkedMaterials(UUID spaceId, User user) {
+                requireMemberSpace(spaceId, user.getId());
+                return materialLinkRepository.findByUserIdAndSpaceId(user.getId(), spaceId)
+                                .stream()
+                                .map(link -> toResponse(link.getMaterial(), true)) // isBookmarked always true here
+                                .toList();
         }
 }

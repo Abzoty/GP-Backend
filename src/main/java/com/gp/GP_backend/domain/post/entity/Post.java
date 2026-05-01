@@ -21,7 +21,9 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "posts", indexes = {
-                @Index(name = "idx_posts_space_created", columnList = "space_id, created_at")
+                @Index(name = "idx_posts_space_created", columnList = "space_id, created_at"),
+                @Index(name = "idx_posts_space_solved", columnList = "space_id, is_solved"),
+                @Index(name = "idx_posts_space_votes", columnList = "space_id, good_question_count DESC")
 })
 @Getter
 @Setter

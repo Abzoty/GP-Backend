@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public interface MaterialRepository extends JpaRepository<Material, UUID> {
@@ -26,6 +27,9 @@ public interface MaterialRepository extends JpaRepository<Material, UUID> {
 
     Integer countBySpaceIdAndUploadedById(UUID spaceId, UUID uid);
 
+    @Query("SELECT ml.material.id FROM MaterialLink ml WHERE ml.user.id = :userId AND ml.material.id IN :materialIds")
+    Set<UUID> findBookmarkedMaterialIds(@Param("userId") UUID userId, @Param("materialIds") List<UUID> materialIds);
+
     /**
      * Searches materials within a space by title or description with an optional
      * resource-type filter.
@@ -36,8 +40,8 @@ public interface MaterialRepository extends JpaRepository<Material, UUID> {
     @Query("""
             SELECT m FROM Material m
             WHERE m.space.id = :spaceId
-            AND (:query IS NULL OR LOWER(m.title) LIKE LOWER(CONCAT('%', :query, '%'))
-                OR LOWER(m.description) LIKE LOWER(CONCAT('%', :query, '%')))
+            AND (:query IS NULL OR m.title LIKE CONCAT('%', :query, '%')
+                OR m.description LIKE CONCAT('%', :query, '%'))
             AND (:resourceType IS NULL OR m.resourceType = :resourceType)
             """)
     Page<Material> searchMaterials(
