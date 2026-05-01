@@ -29,14 +29,16 @@ import java.util.UUID;
 /**
  * REST controller for Posts and Answers.
  *
- * <p>Base paths:
+ * <p>
+ * Base paths:
  * <ul>
- *   <li>{@code POST /api/v1/spaces/{spaceId}/posts} — US-014: create a post</li>
- *   <li>{@code GET  /api/v1/posts/{postId}}          — fetch a single post</li>
- *   <li>{@code POST /api/v1/posts/{postId}/answers}  — US-015: answer a post</li>
+ * <li>{@code POST /api/v1/spaces/{spaceId}/posts} — US-014: create a post</li>
+ * <li>{@code GET  /api/v1/posts/{postId}} — fetch a single post</li>
+ * <li>{@code POST /api/v1/posts/{postId}/answers} — US-015: answer a post</li>
  * </ul>
  *
- * <p>The authenticated user is injected via {@code @AuthenticationPrincipal}
+ * <p>
+ * The authenticated user is injected via {@code @AuthenticationPrincipal}
  * — Spring Security resolves it from the JWT set by {@code JwtAuthFilter}.
  * Since {@code User} implements {@code UserDetails}, no extra lookup is needed.
  */
@@ -55,12 +57,13 @@ public class PostController {
     /**
      * Creates a question or discussion post inside a space.
      *
-     * <p>The caller must be an authenticated member of the target space.
+     * <p>
+     * The caller must be an authenticated member of the target space.
      * Returns 201 Created with the saved post on success.
      *
-     * @param spaceId  path variable — the space to post in
-     * @param request  validated JSON body
-     * @param author   resolved from JWT — the currently authenticated user
+     * @param spaceId path variable — the space to post in
+     * @param request validated JSON body
+     * @param author  resolved from JWT — the currently authenticated user
      */
     @PostMapping("/api/v1/spaces/{spaceId}/posts")
     @Operation(summary = "Create a post in a space (US-014)")
@@ -75,7 +78,6 @@ public class PostController {
                 .status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Post created successfully", post));
     }
-
 
     @PostMapping("/api/v1/spaces/posts/{postId}")
     @Operation(summary = "mark post as good question (US-017)")
@@ -93,11 +95,10 @@ public class PostController {
 
     @PutMapping("/api/v1/spaces/posts/{postId}")
     @Operation(summary = "Edit an existing post")
-    // TODO: return the new post content in the response body
     public ResponseEntity<ApiResponse<Boolean>> editPost(
-        @PathVariable UUID postId,
-        @Valid @RequestBody EditPostRequest request,
-        @AuthenticationPrincipal User user) {
+            @PathVariable UUID postId,
+            @Valid @RequestBody EditPostRequest request,
+            @AuthenticationPrincipal User user) {
         boolean isEdited = postService.editPost(request, user.getId(), postId);
 
         return ResponseEntity
@@ -105,19 +106,17 @@ public class PostController {
                 .body(ApiResponse.ok("Post edited successfully", isEdited));
     }
 
-
     @DeleteMapping("/api/v1/spaces/posts/{postId}")
     @Operation(summary = "Delete an existing post")
     public ResponseEntity<ApiResponse<Boolean>> deletePost(
-        @PathVariable UUID postId,
-        @AuthenticationPrincipal User user) {
+            @PathVariable UUID postId,
+            @AuthenticationPrincipal User user) {
         boolean isDeleted = postService.deletePost(postId, user.getId());
 
         return ResponseEntity
                 .status(HttpStatus.OK)
                 .body(ApiResponse.ok("Post deleted successfully", isDeleted));
     }
-
 
     @PostMapping("/api/v1/spaces/posts/{postId}/answers/{answerId}")
     @Operation(summary = "mark post as solved (US-018)")
@@ -157,7 +156,9 @@ public class PostController {
      */
     @GetMapping("/api/v1/posts/{postId}")
     @Operation(summary = "Get a post by ID")
-    public ResponseEntity<ApiResponse<PostResponse>> getPost(@PathVariable UUID postId, @AuthenticationPrincipal User user) {
+    public ResponseEntity<ApiResponse<PostResponse>> getPost(
+            @PathVariable UUID postId,
+            @AuthenticationPrincipal User user) {
         UUID spaceId = postService.getSpaceIdForPost(postId);
         boolean isMember = spaceService.isMemberInSpace(spaceId, user.getId());
         if (!isMember) {
@@ -167,22 +168,61 @@ public class PostController {
         return ResponseEntity.ok(ApiResponse.ok("Post retrieved", post));
     }
 
-
     @GetMapping("/api/v1/posts/{postId}/answers/{page}/{size}")
     @Operation(summary = "Get all post answers")
-    public ResponseEntity<ApiResponse<List<AnswerResponse>>> getPost(@PathVariable UUID postId, @AuthenticationPrincipal User user,
-        @PathVariable int page, @PathVariable int size
-    ) {
-        return ResponseEntity.ok(ApiResponse.ok("Post Answers retrieved", postService.getPostAnswers(postId, user.getId(), page, size)));
+    public ResponseEntity<ApiResponse<List<AnswerResponse>>> getPostAnswers(
+            @PathVariable UUID postId,
+            @AuthenticationPrincipal User user,
+            @PathVariable int page,
+            @PathVariable int size) {
+        return ResponseEntity.ok(ApiResponse.ok("Post Answers retrieved",
+                postService.getPostAnswers(postId, user.getId(), page, size)));
     }
-
 
     @GetMapping("/api/v1/posts/all-posts/{spaceId}/{page}/{size}")
     @Operation(summary = "Get all posts of space ordered by creation date")
-    public ResponseEntity<ApiResponse<List<AllPostsResponse>>> allPosts(@PathVariable UUID spaceId, 
-        @AuthenticationPrincipal User user, @PathVariable int page, @PathVariable int size) {
+    public ResponseEntity<ApiResponse<List<AllPostsResponse>>> allPosts(
+            @PathVariable UUID spaceId,
+            @AuthenticationPrincipal User user,
+            @PathVariable int page,
+            @PathVariable int size) {
         List<AllPostsResponse> posts = postService.getAllPost(user.getId(), spaceId, page, size);
         return ResponseEntity.ok(ApiResponse.ok("Posts retrieved", posts));
+    }
+
+    // ─── Search ───────────────────────────────────────────────────────────────
+
+    /**
+     * Searches posts within a space by title or body, with optional solved filter
+     * and configurable sort.
+     *
+     * <p>
+     * Caller must be a member of the space.
+     *
+     * @param spaceId  the space to search within.
+     * @param query    substring matched against title and body.
+     * @param isSolved {@code true} = only solved, {@code false} = only unsolved,
+     *                 omit = all posts.
+     * @param sortBy   {@code "goodQuestionCount"} or {@code "createdAt"} (default).
+     * @param sortDir  {@code "asc"} or {@code "desc"} (default).
+     * @param page     zero-based page index (default 0).
+     * @param size     page size (default 20).
+     */
+    @GetMapping("/api/v1/posts/search/{spaceId}")
+    @Operation(summary = "Search posts in a space by title/body with optional solved filter and sort")
+    public ResponseEntity<ApiResponse<List<AllPostsResponse>>> searchPosts(
+            @PathVariable UUID spaceId,
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) Boolean isSolved,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal User user) {
+
+        List<AllPostsResponse> results = postService.searchPosts(
+                user.getId(), spaceId, query, isSolved, sortBy, sortDir, page, size);
+        return ResponseEntity.ok(ApiResponse.ok("Posts retrieved", results));
     }
 
     // ─── US-015: Answer a post ────────────────────────────────────────────────
@@ -190,12 +230,13 @@ public class PostController {
     /**
      * Submits an answer to an existing question post.
      *
-     * <p>The caller must be an authenticated member of the space that owns
+     * <p>
+     * The caller must be an authenticated member of the space that owns
      * the post. Returns 201 Created with the saved answer on success.
      *
-     * @param postId   path variable — the post being answered
-     * @param request  validated JSON body
-     * @param author   resolved from JWT — the currently authenticated user
+     * @param postId  path variable — the post being answered
+     * @param request validated JSON body
+     * @param author  resolved from JWT — the currently authenticated user
      */
     @PostMapping("/api/v1/posts/{postId}/answers")
     @Operation(summary = "Answer a question post (US-015)")
@@ -211,10 +252,8 @@ public class PostController {
                 .body(ApiResponse.ok("Answer submitted successfully", answer));
     }
 
-
     @PutMapping("/api/v1/answers/{answerId}")
     @Operation(summary = "Edit an existing answer")
-    // TODO: return the new answer content in the response body 
     public ResponseEntity<ApiResponse<Boolean>> editAnswer(
             @PathVariable UUID answerId,
             @Valid @RequestBody EditAnswerRequest request,

@@ -11,7 +11,10 @@ import java.util.UUID;
 
 
 @Entity
-@Table(name = "materials")
+@Table(name = "materials", indexes = {
+        @Index(name = "idx_materials_space_created", columnList = "space_id, created_at DESC"),
+        @Index(name = "idx_materials_space_type", columnList = "space_id, resource_type")
+})
 @Getter
 @Setter
 @NoArgsConstructor
