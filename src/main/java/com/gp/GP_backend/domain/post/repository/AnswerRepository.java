@@ -76,4 +76,9 @@ public interface AnswerRepository extends JpaRepository<Answer, UUID> {
         GROUP BY a.authorId
         """)
         List<Object[]> countBySpaceIdGroupByAuthor(@Param("spaceId") UUID spaceId);
-    }
+    
+
+        // Fetches answer counts for multiple posts in ONE query
+        @Query("SELECT a.postId, COUNT(a) FROM Answer a WHERE a.postId IN :postIds GROUP BY a.postId")
+        java.util.List<Object[]> countAnswersByPostIds(@Param("postIds") java.util.List<UUID> postIds);
+}

@@ -2,6 +2,7 @@ package com.gp.GP_backend.domain.user.repository;
 
 import com.gp.GP_backend.domain.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -22,6 +23,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     /** Checked during registration to prevent duplicate email addresses. */
     boolean existsByEmail(String email);
 
+    @Query("SELECT u.isActive FROM User u WHERE u.id = :userId")
+    boolean isActiveById(UUID userId);
     /** Checked during registration to prevent duplicate student IDs. */
     boolean existsByStudentId(String studentId);
+    String findNameById(UUID userId);
 }

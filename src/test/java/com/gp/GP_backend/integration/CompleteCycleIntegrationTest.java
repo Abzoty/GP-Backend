@@ -68,6 +68,7 @@ class CompleteCycleIntegrationTest {
 
     @Autowired
     private EntityManager entityManager;
+    
 
     @Test
     @Transactional
@@ -115,12 +116,11 @@ class CompleteCycleIntegrationTest {
         spaceService.joinSpace(spaceId, otherUser);
 
         ShareLinkRequest shareLinkRequest = new ShareLinkRequest();
-        shareLinkRequest.setSpaceId(spaceId);
         shareLinkRequest.setTitle("Useful link");
         shareLinkRequest.setDescription("desc");
         shareLinkRequest.setUrl("https://example.com");
 
-        UUID materialId = materialService.shareLink(shareLinkRequest, spaceOwner).getId();
+        UUID materialId = materialService.shareLink(spaceId, shareLinkRequest, spaceOwner).getId();
         assertNotNull(materialId);
 
         materialService.bookmark(materialId, otherUser);

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import com.gp.GP_backend.domain.post.entity.Vote;
 import com.gp.GP_backend.domain.post.entity.VoteType;
+import com.gp.GP_backend.domain.notification.service.NotificationService;
 import com.gp.GP_backend.domain.post.entity.TargetType;
 import com.gp.GP_backend.domain.post.entity.Answer;
 import com.gp.GP_backend.domain.post.repository.AnswerRepository;
@@ -53,6 +54,7 @@ public class VoteService {
         private final SpaceRepository spaceRepository;
         private final SpaceMembershipRepository spaceMembershipRepository;
         private final GamificationService gamificationService;
+        private final NotificationService notificationService;
 
         @Transactional
         public boolean markGoodQuestion(UUID postId, User user) {
@@ -84,9 +86,11 @@ public class VoteService {
                                 .voteType(VoteType.GOOD_QUESTION)
                                 .createdAt(LocalDateTime.now())
                                 .build();
+                
 
                 try {
-                        Vote savedVote = voteRepository.save(newVote);
+                         Vote savedVote = voteRepository.save(newVote);
+                        notificationService.notifyGoodQuestionMarked(postId, user);
                         // Award the post's author, not the voter.
                         // Use the vote ID as reference to allow multiple users to vote
                         // on the same post while still being idempotent per vote.
@@ -99,9 +103,6 @@ public class VoteService {
                 } catch (DataIntegrityViolationException ex) {
                         throw new ApiException(HttpStatus.CONFLICT, "User has already voted on this question");
                 }
-
-
-
                 return true;
         }
 
@@ -138,9 +139,12 @@ public class VoteService {
                                 .voteType(VoteType.UPVOTE)
                                 .createdAt(LocalDateTime.now())
                                 .build();
+               
+                
 
                 try {
                         Vote savedVote = voteRepository.save(newVote);
+                        notificationService.notifyUpvoteAnswerReceived(answerId, user);
                         // Award the answer's author, not the voter.
                         // Use the vote ID as reference to allow multiple users to upvote
                         // the same answer while still being idempotent per vote.

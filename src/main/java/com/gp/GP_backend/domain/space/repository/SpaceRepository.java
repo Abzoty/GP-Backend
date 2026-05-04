@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-
 public interface SpaceRepository extends JpaRepository<Space, UUID> {
 
     /** Used to check slug uniqueness before creating a new space. */
@@ -34,7 +33,7 @@ public interface SpaceRepository extends JpaRepository<Space, UUID> {
     /** Returns all active spaces, newest first, paginated. */
     Page<Space> findByIsActiveTrueOrderByCreatedAtDesc(Pageable pageable);
 
-     /** returns all spaces that share the same course code, newest first. */
+    /** returns all spaces that share the same course code, newest first. */
     List<Space> findByCourseCodeOrderByCreatedAtDesc(String courseCode);
 
     /**
@@ -44,7 +43,7 @@ public interface SpaceRepository extends JpaRepository<Space, UUID> {
     List<Space> findByCategoryAndIsActiveTrue(SpaceCategory category);
 
     List<Space> findAll();
-    
+
     @Query("SELECT s FROM Space s WHERE s.isActive = true")
     List<Space> findAllActiveSpaces();
 
@@ -59,4 +58,23 @@ public interface SpaceRepository extends JpaRepository<Space, UUID> {
     @Modifying
     @Query("UPDATE Space s SET s.memberCount = CASE WHEN s.memberCount > 0 THEN s.memberCount - 1 ELSE 0 END WHERE s.id = :spaceId")
     int decrementMemberCount(@Param("spaceId") UUID spaceId);
+    @Query("SELECT s.name FROM Space s WHERE s.id = :spaceId")
+    String findNameById(UUID spaceId);
+
+    /**
+     * Full-text search across name and description with optional category filter.
+     * All parameters are optional — passing {@code null} skips that filter.
+     * Sorting and pagination are driven by the supplied {@link Pageable}.
+     */
+    @Query("""
+            SELECT s FROM Space s
+            WHERE s.isActive = true
+            AND (:query IS NULL OR s.name LIKE CONCAT('%', :query, '%')
+                OR s.description LIKE CONCAT('%', :query, '%'))
+            AND (:category IS NULL OR s.category = :category)
+            """)
+    Page<Space> searchSpaces(
+            @Param("query") String query,
+            @Param("category") SpaceCategory category,
+            Pageable pageable);
 }

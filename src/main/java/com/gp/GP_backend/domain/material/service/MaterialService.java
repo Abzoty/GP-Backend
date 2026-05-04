@@ -8,6 +8,7 @@ import com.gp.GP_backend.domain.material.entity.Material;
 import com.gp.GP_backend.domain.material.entity.MaterialLink;
 import com.gp.GP_backend.domain.material.repository.MaterialLinkRepository;
 import com.gp.GP_backend.domain.material.repository.MaterialRepository;
+import com.gp.GP_backend.domain.notification.service.NotificationService;
 import com.gp.GP_backend.domain.space.entity.Space;
 import com.gp.GP_backend.domain.space.repository.SpaceMembershipRepository;
 import com.gp.GP_backend.domain.space.repository.SpaceRepository;
@@ -22,6 +23,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,19 +41,23 @@ import java.util.UUID;
 @Slf4j
 public class MaterialService {
 
-    private static final String RESOURCE_TYPE_LINK = "LINK";
+        private static final String RESOURCE_TYPE_LINK = "LINK";
 
-    private final MaterialRepository materialRepository;
-    private final MaterialLinkRepository materialLinkRepository;
-    private final SpaceMembershipRepository spaceMembershipRepository;
-    private final SpaceRepository spaceRepository;
-    private final FileStorageService fileStorageService;
-    private final GamificationService gamificationService;
+        /** Valid sort fields for material search. */
+        private static final Set<String> MATERIAL_SORT_FIELDS = Set.of("linkCount", "createdAt");
 
-    // ─── Upload file ──────────────────────────────────────────────────────────
+        private final MaterialRepository materialRepository;
+        private final MaterialLinkRepository materialLinkRepository;
+        private final SpaceMembershipRepository spaceMembershipRepository;
+        private final SpaceRepository spaceRepository;
+        private final FileStorageService fileStorageService;
+        private final GamificationService gamificationService;
+        private final NotificationService notificationService;
 
-    @Transactional
-    public MaterialResponse uploadFile(UUID spaceId,
+        // ─── Upload file ──────────────────────────────────────────────────────────
+
+        @Transactional
+ public MaterialResponse uploadFile(UUID spaceId,
             String title,
             String description,
             MultipartFile file,
@@ -76,6 +83,7 @@ public class MaterialService {
 try{
 
         Material saved = materialRepository.save(material);
+        notificationService.notifyNewMaterialShared(saved, uploader);
 
         gamificationService.awardXp(
                 uploader.getId(),
@@ -90,11 +98,14 @@ try{
         }
     }
 
-    // ─── Share link ────────────────────────────────────────────────────────────
 
-    @Transactional
-    public MaterialResponse shareLink(ShareLinkRequest request, User uploader) {
-        Space space = requireMemberSpace(request.getSpaceId(), uploader.getId());
+
+
+        // ─── Share link ────────────────────────────────────────────────────────────
+
+       @Transactional
+    public MaterialResponse shareLink(UUID spaceId, ShareLinkRequest request, User uploader) {
+        Space space = requireMemberSpace(spaceId, uploader.getId());
 
         Material material = Material.builder()
                 .space(space)
@@ -108,6 +119,7 @@ try{
 try{
 
         Material saved = materialRepository.save(material);
+        notificationService.notifyNewMaterialShared(saved, uploader);
 
         gamificationService.awardXp(
                 uploader.getId(),
@@ -121,9 +133,12 @@ try{
         }
     }
 
-    // ─── Bookmark (add) ────────────────────────────────────────────────────────
 
-    @Transactional
+
+
+        // ─── Bookmark (add) ────────────────────────────────────────────────────────
+
+            @Transactional
     public void bookmark(UUID materialId, User user) {
         Material material = requireMaterial(materialId);
         requireMember(material.getSpace().getId(), user.getId());
@@ -157,9 +172,7 @@ try{
         }
     }
 
-    // ─── Bookmark (remove) ────────────────────────────────────────────────────
-
-    @Transactional
+        @Transactional
     public void unbookmark(UUID materialId, User user) {
         Material material = requireMaterial(materialId);
         requireMember(material.getSpace().getId(), user.getId());
@@ -183,13 +196,13 @@ try{
         materialLinkRepository.decrementLinkCount(materialId);
     }
 
-    // ─── Edit ─────────────────────────────────────────────────────────────────
+        // ─── Edit ─────────────────────────────────────────────────────────────────
 
-    @Transactional
-    public MaterialResponse editMaterial(UUID materialId, EditMaterialRequest request, User user) {
-        Material material = requireMaterial(materialId);
+        @Transactional
+        public MaterialResponse editMaterial(UUID materialId, EditMaterialRequest request, User user) {
+                Material material = requireMaterial(materialId);
 
-        if (!material.getUploadedBy().getId().equals(user.getId())) {
+                        if (!material.getUploadedBy().getId().equals(user.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN,
                     "Only the uploader can edit this material");
         }
@@ -206,46 +219,8 @@ try{
         boolean isBookmarked = materialLinkRepository.existsByMaterialIdAndUserId(materialId, user.getId());
 
         return toResponse(saved, isBookmarked);
-    }
+}
 
-    // ─── Delete ───────────────────────────────────────────────────────────────
-
-    @Transactional
-    public void deleteMaterial(UUID materialId, User user) {
-        Material material = requireMaterial(materialId);
-
-        if (!material.getUploadedBy().getId().equals(user.getId())) {
-            throw new ApiException(HttpStatus.FORBIDDEN,
-                    "Only the uploader can delete this material");
-        }
-
-        gamificationService.revokeXp(
-            material.getUploadedBy().getId(),
-            XpCalculator.EVENT_MATERIAL_SHARED,
-            materialId,
-            XpCalculator.REF_MATERIAL);
-
-        // 1. Remove all bookmarks (cascade-clean the material_links table)
-        materialLinkRepository.deleteByMaterialId(materialId);
-
-        // 2. Delete the physical file if this is a file material
-        if (!RESOURCE_TYPE_LINK.equals(material.getResourceType())) {
-            fileStorageService.delete(material.getUrl());
-        }
-
-        // 3. Remove the material record
-        materialRepository.deleteById(materialId);
-    }
-
-    // ─── Getters ──────────────────────────────────────────────────────────────
-
-    @Transactional(readOnly = true)
-    public MaterialResponse getMaterial(UUID materialId, User user) {
-        Material material = requireMaterial(materialId);
-        requireMember(material.getSpace().getId(), user.getId());
-        boolean isBookmarked = materialLinkRepository.existsByMaterialIdAndUserId(materialId, user.getId());
-        return toResponse(material, isBookmarked);
-    }
 
     /**
      * Returns all materials in a space ordered by creation date (newest first).
@@ -300,49 +275,160 @@ try{
                 .map(link -> toResponse(link.getMaterial(), true));
     }
 
-    // ─── Private helpers ──────────────────────────────────────────────────────
+               
+        
 
-    // Loads a material by ID or throws 404.
-    private Material requireMaterial(UUID materialId) {
-        return materialRepository.findById(materialId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
-                        "Material not found with id: " + materialId));
-    }
+        // ─── Delete ───────────────────────────────────────────────────────────────
 
-    // Loads a space by ID and verifies the given user is a member.
-    private Space requireMemberSpace(UUID spaceId, UUID userId) {
-        Space space = spaceRepository.findById(spaceId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
-                        "Space not found with id: " + spaceId));
-        requireMember(spaceId, userId);
-        return space;
-    }
+        @Transactional
+        public void deleteMaterial(UUID materialId, User user) {
+                Material material = requireMaterial(materialId);
 
-    // Verifies that the user is a member of the given space.
-    private void requireMember(UUID spaceId, UUID userId) {
-        if (!spaceMembershipRepository.existsBySpaceIdAndUserId(spaceId, userId)) {
-            throw new ApiException(HttpStatus.FORBIDDEN,
-                    "You must be a member of this space to access its materials");
+                if (!material.getUploadedBy().getId().equals(user.getId())) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                        "Only the uploader can delete this material");
+                }
+
+                // 1. Remove all bookmarks (cascade-clean the material_links table)
+                materialLinkRepository.deleteByMaterialId(materialId);
+
+                // 2. Delete the physical file if this is a file material
+                if (!RESOURCE_TYPE_LINK.equals(material.getResourceType())) {
+                        fileStorageService.delete(material.getUrl());
+                }
+
+                // 3. Remove the material record
+                materialRepository.deleteById(materialId);
         }
-    }
 
-    // Maps a Material entity to its response DTO.
-    private MaterialResponse toResponse(Material m, boolean isBookmarked) {
-        return MaterialResponse.builder()
-                .id(m.getId())
-                .spaceId(m.getSpace().getId())
-                .spaceName(m.getSpace().getName())
-                .uploadedById(m.getUploadedBy().getId())
-                .uploadedByName(m.getUploadedBy().getFullName())
-                .title(m.getTitle())
-                .description(m.getDescription())
-                .resourceType(m.getResourceType())
-                .url(m.getUrl())
-                .fileSizeKb(m.getFileSizeKb())
-                .linkCount(m.getLinkCount())
-                .isBookmarked(isBookmarked)
-                .createdAt(m.getCreatedAt())
-                .updatedAt(m.getUpdatedAt())
-                .build();
-    }
+        // ─── Getters ──────────────────────────────────────────────────────────────
+
+        @Transactional(readOnly = true)
+        public MaterialResponse getMaterial(UUID materialId, User user) {
+                Material material = requireMaterial(materialId);
+                requireMember(material.getSpace().getId(), user.getId());
+                boolean isBookmarked = materialLinkRepository.existsByMaterialIdAndUserId(materialId, user.getId());
+                return toResponse(material, isBookmarked);
+        }
+
+        /**
+         * Returns all materials in a space ordered by creation date (newest first).
+         * The isBookmarked flag on each item reflects the requesting user's bookmark
+         * state,
+         * so the frontend can render bookmark icons without extra calls.
+         */
+
+
+        /**
+         * Searches materials in a space for title/description with optional filters for
+         * resource type, plus pagination and sorting. The isBookmarked flag on each item
+         * @param spaceId
+         * @param query
+         * @param resourceType
+         * @param sortBy
+         * @param sortDir
+         * @param page
+         * @param size
+         * @param user
+         * @return
+         */
+
+        @Transactional(readOnly = true)
+        public List<MaterialResponse> searchMaterials(
+                        UUID spaceId, String query, String resourceType,
+                        String sortBy, String sortDir, int page, int size, User user) {
+
+                requireMemberSpace(spaceId, user.getId());
+
+                Sort sort = buildSort(sortBy, sortDir);
+                PageRequest pageable = PageRequest.of(page, size, sort);
+
+                String normalizedQuery = (query == null || query.isBlank()) ? null : query.trim();
+                String normalizedType = (resourceType == null || resourceType.isBlank()) ? null
+                                : resourceType.trim().toUpperCase();
+
+                List<Material> materials = materialRepository
+                                .searchMaterials(spaceId, normalizedQuery, normalizedType, pageable)
+                                .getContent();
+
+                if (materials.isEmpty())
+                        return List.of();
+
+                // Fetch all bookmarks for this page in ONE query
+                List<UUID> materialIds = materials.stream().map(Material::getId).toList();
+                Set<UUID> bookmarkedIds = materialLinkRepository.findBookmarkedMaterialIds(user.getId(), materialIds);
+
+                return materials.stream()
+                                .map(m -> toResponse(m, bookmarkedIds.contains(m.getId())))
+                                .toList();
+        }
+
+        // ─── Private helpers ──────────────────────────────────────────────────────
+
+        // Loads a material by ID or throws 404.
+        private Material requireMaterial(UUID materialId) {
+                return materialRepository.findById(materialId)
+                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                                "Material not found with id: " + materialId));
+        }
+
+        // Loads a space by ID and verifies the given user is a member.
+        private Space requireMemberSpace(UUID spaceId, UUID userId) {
+                Space space = spaceRepository.findById(spaceId)
+                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                                "Space not found with id: " + spaceId));
+                requireMember(spaceId, userId);
+                return space;
+        }
+
+        // Verifies that the user is a member of the given space.
+        private void requireMember(UUID spaceId, UUID userId) {
+                if (!spaceMembershipRepository.existsBySpaceIdAndUserId(spaceId, userId)) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                        "You must be a member of this space to access its materials");
+                }
+        }
+
+        /**
+         * Builds a {@link Sort} from the supplied field name and direction, falling
+         * back to {@code createdAt DESC} for unknown values.
+         */
+        private Sort buildSort(String sortBy, String sortDir) {
+                Sort.Direction direction = "asc".equalsIgnoreCase(sortDir)
+                                ? Sort.Direction.ASC
+                                : Sort.Direction.DESC;
+                String field = (sortBy != null && MATERIAL_SORT_FIELDS.contains(sortBy)) ? sortBy : "createdAt";
+                return Sort.by(direction, field);
+        }
+
+        // Maps a Material entity to its response DTO.
+        private MaterialResponse toResponse(Material m, boolean isBookmarked) {
+                return MaterialResponse.builder()
+                                .id(m.getId())
+                                .spaceId(m.getSpace().getId())
+                                .spaceName(m.getSpace().getName())
+                                .uploadedById(m.getUploadedBy().getId())
+                                .uploadedByName(m.getUploadedBy().getFullName())
+                                .title(m.getTitle())
+                                .description(m.getDescription())
+                                .resourceType(m.getResourceType())
+                                .url(m.getUrl())
+                                .fileSizeKb(m.getFileSizeKb())
+                                .linkCount(m.getLinkCount())
+                                .isBookmarked(isBookmarked)
+                                .createdAt(m.getCreatedAt())
+                                .updatedAt(m.getUpdatedAt())
+                                .build();
+        }
+
+        // Returns only the materials bookmarked by the requesting user in a specific
+        // space.
+        @Transactional(readOnly = true)
+        public List<MaterialResponse> getBookmarkedMaterials(UUID spaceId, User user) {
+                requireMemberSpace(spaceId, user.getId());
+                return materialLinkRepository.findByUserIdAndSpaceId(user.getId(), spaceId)
+                                .stream()
+                                .map(link -> toResponse(link.getMaterial(), true)) // isBookmarked always true here
+                                .toList();
+        }
 }

@@ -29,6 +29,10 @@ public class RegisterRequest {
             message = "Password must contain uppercase, lowercase, number, and special character")
     private String password;
 
+    @Pattern(
+        regexp = "^\\d{8}$",
+        message = "Student ID must be exactly 8 digits"
+    )
     /** Optional — not required for registration but must be unique if provided. */
     private String studentId;
 

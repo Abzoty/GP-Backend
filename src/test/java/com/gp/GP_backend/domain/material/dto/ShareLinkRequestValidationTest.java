@@ -33,7 +33,6 @@ class ShareLinkRequestValidationTest {
     @Test
     void shouldAcceptHttpOrHttpsUrl() {
         ShareLinkRequest request = new ShareLinkRequest();
-        request.setSpaceId(UUID.randomUUID());
         request.setTitle("Official docs");
         request.setUrl("https://example.com/docs");
 
@@ -45,7 +44,6 @@ class ShareLinkRequestValidationTest {
     @Test
     void shouldRejectNonHttpScheme() {
         ShareLinkRequest request = new ShareLinkRequest();
-        request.setSpaceId(UUID.randomUUID());
         request.setTitle("Bad link");
         request.setUrl("javascript:alert(1)");
 

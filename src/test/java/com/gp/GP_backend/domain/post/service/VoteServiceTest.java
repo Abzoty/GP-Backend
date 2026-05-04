@@ -1,5 +1,6 @@
 package com.gp.GP_backend.domain.post.service;
 
+import com.gp.GP_backend.domain.notification.service.NotificationService;
 import com.gp.GP_backend.domain.post.entity.Answer;
 import com.gp.GP_backend.domain.post.entity.TargetType;
 import com.gp.GP_backend.domain.post.repository.AnswerRepository;
@@ -51,6 +52,8 @@ class VoteServiceTest {
 
     @Mock
     private GamificationService gamificationService;
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private VoteService voteService;

@@ -1,5 +1,6 @@
 package com.gp.GP_backend.domain.post.service;
 
+import com.gp.GP_backend.domain.notification.service.NotificationService;
 import com.gp.GP_backend.domain.post.entity.Answer;
 import com.gp.GP_backend.domain.post.entity.Post;
 import com.gp.GP_backend.domain.post.repository.AnswerRepository;
@@ -51,6 +52,8 @@ class PostServiceGamificationTest {
 
     @InjectMocks
     private PostService postService;
+  @Mock
+private NotificationService notificationService;
 
     @Test
     void markQuestionAsSolvedShouldRejectSelfAcceptedAnswer() {

@@ -7,6 +7,7 @@ import com.gp.GP_backend.domain.material.entity.Material;
 import com.gp.GP_backend.domain.material.entity.MaterialLink;
 import com.gp.GP_backend.domain.material.repository.MaterialLinkRepository;
 import com.gp.GP_backend.domain.material.repository.MaterialRepository;
+import com.gp.GP_backend.domain.notification.service.NotificationService;
 import com.gp.GP_backend.domain.space.entity.Space;
 import com.gp.GP_backend.domain.space.repository.SpaceMembershipRepository;
 import com.gp.GP_backend.domain.space.repository.SpaceRepository;
@@ -60,6 +61,8 @@ class MaterialServiceTest {
 
     @Mock
     private GamificationService gamificationService;
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private MaterialService materialService;
@@ -117,7 +120,6 @@ class MaterialServiceTest {
         Space space = space(spaceId);
 
         ShareLinkRequest request = new ShareLinkRequest();
-        request.setSpaceId(spaceId);
         request.setTitle(" Useful resource ");
         request.setDescription("Great article");
         request.setUrl("https://example.com");
@@ -132,7 +134,7 @@ class MaterialServiceTest {
 
         when(materialRepository.save(any(Material.class))).thenReturn(saved);
 
-        MaterialResponse response = materialService.shareLink(request, uploader);
+        MaterialResponse response = materialService.shareLink(spaceId, request, uploader);
 
         assertEquals("LINK", response.getResourceType());
         assertEquals("Useful resource", response.getTitle());

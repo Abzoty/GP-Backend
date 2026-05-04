@@ -4,6 +4,7 @@ import com.gp.GP_backend.domain.post.dto.CreateAnswerRequest;
 import com.gp.GP_backend.domain.post.dto.CreatePostRequest;
 import com.gp.GP_backend.domain.post.dto.EditAnswerRequest;
 import com.gp.GP_backend.domain.post.dto.EditPostRequest;
+import com.gp.GP_backend.domain.notification.service.NotificationService;
 import com.gp.GP_backend.domain.post.dto.AllPostsResponse;
 import com.gp.GP_backend.domain.post.dto.AnswerResponse;
 import com.gp.GP_backend.domain.post.dto.PostResponse;
@@ -28,6 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,12 +65,8 @@ import java.util.stream.Collectors;
 @Slf4j
 public class PostService {
 
-        // ─── XP constants (from product backlog §7.2) ─────────────────────────────
-        // private static final int XP_POST_CREATED = 10;
-        // private static final int XP_ANSWER_GIVEN = 15;
-
-        // private static final String EVENT_POST_CREATED = "POST_CREATED";
-        // private static final String EVENT_ANSWER_GIVEN = "ANSWER_GIVEN";
+        /** Valid sort fields for post search. */
+        private static final Set<String> POST_SORT_FIELDS = Set.of("goodQuestionCount", "createdAt");
 
         // ─── Dependencies ─────────────────────────────────────────────────────────
         private final PostRepository postRepository;
@@ -79,12 +77,7 @@ public class PostService {
         private final SpaceRepository spaceRepository;
         private final VoteRepository voteRepository;
         private final GamificationService gamificationService;
-        // private final GamificationService gamificationService;
-
-        // NotificationService is injected optionally so the feature compiles even
-        // before NotificationService is fully implemented (see its TODO stub).
-        // Switch to a required constructor injection once the service is complete.
-        // private final NotificationService notificationService;
+        private final NotificationService notificationService;
 
         // ─── US-014: Create a question post ───────────────────────────────────────
 
@@ -126,8 +119,8 @@ public class PostService {
                                 .body(request.getBody())
                                 .createdAt(LocalDateTime.now())
                                 .build();
-
                 Post saved = postRepository.save(post);
+                notificationService.notifyNewPostCreated(saved, author);
                 log.debug("Post created: id={}, spaceId={}, authorId={}", saved.getId(), spaceId, author.getId());
 
                 // Award XP to the author — same transaction
@@ -241,6 +234,8 @@ public class PostService {
                 Answer saved = answerRepository.save(answer);
                 log.debug("Answer created: id={}, postId={}, authorId={}", saved.getId(), postId, author.getId());
 
+                notificationService.notifyNewAnswer(post, saved, author);
+
                 // Award XP to the answerer — same transaction
                 gamificationService.awardXp(
                                 author.getId(),
@@ -249,14 +244,11 @@ public class PostService {
                                 saved.getId(),
                                 XpCalculator.REF_ANSWER);
 
-                // TODO: notify question author once NotificationService is implemented
-                // notificationService.notifyNewAnswer(post, saved, author);
-
                 String authorName = author.getFullName();
                 return toAnswerResponse(saved, authorName);
         }
 
-        // ======================= mark question as solver =========================
+        // ─── Mark question as solved ──────────────────────────────────────────────
 
         @Transactional
         public boolean markQuestionAsSolved(UUID postId, UUID answerId, User user) {
@@ -334,6 +326,8 @@ public class PostService {
                         throw new ApiException(HttpStatus.BAD_REQUEST,
                                         "Post is already solved");
                 }
+
+                notificationService.notifyAnswerAccepted(answerId);
 
                 // Award the answerer for having their answer accepted
                 gamificationService.awardXp(
@@ -478,64 +472,49 @@ public class PostService {
                 return true;
         }
 
-        @Transactional
+        @Transactional(readOnly = true)
         public List<AllPostsResponse> getAllPost(UUID userId, UUID spaceId, int page, int size) {
-
                 if (!spaceRepository.existsById(spaceId)) {
-                        throw new ApiException(HttpStatus.NOT_FOUND,
-                                        "Space not found with id: " + spaceId);
+                        throw new ApiException(HttpStatus.NOT_FOUND, "Space not found with id: " + spaceId);
                 }
-
                 if (!userRepository.existsById(userId)) {
-                        throw new ApiException(HttpStatus.NOT_FOUND,
-                                        "User not found with id: " + userId);
+                        throw new ApiException(HttpStatus.NOT_FOUND, "User not found with id: " + userId);
                 }
-
-                boolean isMember = spaceMembershipRepository
-                                .existsBySpaceIdAndUserId(spaceId, userId);
-
-                if (!isMember) {
+                if (!spaceMembershipRepository.existsBySpaceIdAndUserId(spaceId, userId)) {
                         throw new ApiException(HttpStatus.FORBIDDEN,
                                         "You must be a member of this space to view posts");
                 }
 
-                PageRequest pageable = PageRequest.of(page, size);
+                Page<Post> postPage = postRepository.findBySpaceIdOrderByCreatedAtDesc(spaceId,
+                                PageRequest.of(page, size));
+                return mapToAllPostsResponses(postPage.getContent(), spaceId);
+        }
 
-                Page<Post> postPage = postRepository
-                                .findBySpaceIdOrderByCreatedAtDesc(spaceId, pageable);
+        @Transactional(readOnly = true)
+        public List<AllPostsResponse> searchPosts(
+                        UUID userId, UUID spaceId, String query, Boolean isSolved,
+                        String sortBy, String sortDir, int page, int size) {
 
-                List<Post> posts = postPage.getContent();
-                if (posts.isEmpty()) {
-                        return List.of();
+                if (!spaceRepository.existsById(spaceId)) {
+                        throw new ApiException(HttpStatus.NOT_FOUND, "Space not found with id: " + spaceId);
+                }
+                if (!spaceMembershipRepository.existsBySpaceIdAndUserId(spaceId, userId)) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                        "You must be a member of this space to view posts");
                 }
 
-                Set<UUID> postAuthorIds = posts.stream().map(Post::getAuthorId).collect(Collectors.toSet());
-                Set<UUID> postSpaceIds = posts.stream().map(Post::getSpaceId).collect(Collectors.toSet());
-                List<UUID> postIds = posts.stream().map(Post::getId).toList();
+                Sort sort = buildSort(sortBy, sortDir);
+                PageRequest pageable = PageRequest.of(page, size, sort);
+                String normalizedQuery = (query == null || query.isBlank()) ? null : query.trim();
 
-                Map<UUID, User> postAuthors = userRepository.findAllById(postAuthorIds).stream()
-                                .collect(Collectors.toMap(User::getId, u -> u));
-                Map<UUID, Space> postSpaces = spaceRepository.findAllById(postSpaceIds).stream()
-                                .collect(Collectors.toMap(Space::getId, s -> s));
-                Map<UUID, Integer> answerCountsByPostId = mapAnswerCountsByPostId(postIds);
-
-                return posts.stream()
-                                .map(post -> mapToAllPostsResponse(
-                                                post,
-                                                postAuthors.get(post.getAuthorId()),
-                                                postSpaces.get(post.getSpaceId()),
-                                                answerCountsByPostId.getOrDefault(post.getId(), 0)))
-                                .toList();
+                Page<Post> postPage = postRepository.searchPosts(spaceId, normalizedQuery, isSolved, pageable);
+                return mapToAllPostsResponses(postPage.getContent(), spaceId);
         }
 
         // ─── Mapping helpers ──────────────────────────────────────────────────────
 
         /**
          * Maps a {@link Post} entity to a {@link PostResponse}.
-         *
-         * <p>
-         * Tags are stored as a comma-separated string and split back into a list
-         * here so the client always receives a proper JSON array.
          */
         private PostResponse toPostResponse(Post post, String authorName, int answerCount) {
 
@@ -570,60 +549,93 @@ public class PostService {
                                 .build();
         }
 
-        public AllPostsResponse mapToAllPostsResponse(Post post) {
+        private List<AllPostsResponse> mapToAllPostsResponses(List<Post> posts, UUID spaceId) {
+                if (posts.isEmpty())
+                        return List.of();
 
-                User author = userRepository.findById(post.getAuthorId())
-                                .orElseThrow(() -> new ApiException(
-                                                HttpStatus.NOT_FOUND, "USER_NOT_FOUND",
-                                                "Author not found for post: " + post.getId()));
+                // 1. Fetch the single space once
+                Space space = spaceRepository.findById(spaceId)
+                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Space not found"));
 
-                Space space = spaceRepository.findById(post.getSpaceId())
-                                .orElseThrow(() -> new ApiException(
-                                                HttpStatus.NOT_FOUND, "SPACE_NOT_FOUND",
-                                                "Space not found for post: " + post.getId()));
+                // 2. Batch fetch answer counts
+                List<UUID> postIds = posts.stream().map(Post::getId).toList();
+                List<Object[]> answerCountsRaw = answerRepository.countAnswersByPostIds(postIds);
+                java.util.Map<UUID, Integer> answerCounts = new java.util.HashMap<>();
+                for (Object[] row : answerCountsRaw) {
+                        answerCounts.put((UUID) row[0], ((Number) row[1]).intValue());
+                }
 
-                int answerCount = answerRepository.countByPostId(post.getId());
+                // 3. Prepare to batch fetch users
+                Set<UUID> userIdsToFetch = posts.stream().map(Post::getAuthorId)
+                                .collect(java.util.stream.Collectors.toSet());
 
-                return mapToAllPostsResponse(post, author, space, answerCount);
+                // 4. Fetch top answers per post & collect their authors
+                java.util.Map<UUID, List<Answer>> topAnswersMap = new java.util.HashMap<>();
+                for (UUID pid : postIds) {
+                        List<Answer> topAnswers = answerRepository
+                                        .findByPostIdOrderByIsAcceptedDescUpvoteCountDescCreatedAtAsc(
+                                                        pid, PageRequest.of(0, 3))
+                                        .getContent();
+                        topAnswersMap.put(pid, topAnswers);
+                        topAnswers.forEach(a -> userIdsToFetch.add(a.getAuthorId()));
+                }
+
+                // 5. Batch fetch all Users (Post authors AND Answer authors at the same time)
+                java.util.Map<UUID, User> usersMap = userRepository.findAllById(userIdsToFetch).stream()
+                                .collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
+
+                // 6. Assemble the DTOs entirely in memory (Lightning fast)
+                return posts.stream().map(post -> {
+                        User author = usersMap.get(post.getAuthorId());
+                        int count = answerCounts.getOrDefault(post.getId(), 0);
+                        List<Answer> topAnswers = topAnswersMap.getOrDefault(post.getId(), List.of());
+
+                        List<AllPostsResponse.AnswerSummary> answerSummaries = topAnswers.stream().map(ans -> {
+                                User ansAuthor = usersMap.get(ans.getAuthorId());
+                                return AllPostsResponse.AnswerSummary.builder()
+                                                .answerId(ans.getId())
+                                                .authorId(ans.getAuthorId())
+                                                .authorName(ansAuthor != null ? ansAuthor.getFullName() : "Unknown")
+                                                .authorAvatarUrl(ansAuthor != null ? ansAuthor.getImageUrl() : null)
+                                                .body(ans.getBody())
+                                                .upvoteCount(ans.getUpvoteCount())
+                                                .isAccepted(ans.getIsAccepted())
+                                                .createdAt(ans.getCreatedAt().toInstant(ZoneOffset.UTC))
+                                                .build();
+                        }).toList();
+
+                        return AllPostsResponse.builder()
+                                        .postId(post.getId())
+                                        .title(post.getTitle())
+                                        .body(post.getBody())
+                                        .authorId(author != null ? author.getId() : post.getAuthorId())
+                                        .authorName(author != null ? author.getFullName() : "Unknown")
+                                        .authorAvatarUrl(author != null ? author.getImageUrl() : null)
+                                        .spaceId(space.getId())
+                                        .spaceName(space.getName())
+                                        .goodQuestionCount(post.getGoodQuestionCount())
+                                        .answerCount(count)
+                                        .viewCount(post.getViewCount())
+                                        .solved(post.getIsSolved())
+                                        .top3Answers(answerSummaries)
+                                        .createdAt(post.getCreatedAt().toInstant(ZoneOffset.UTC))
+                                        .updatedAt(post.getUpdatedAt() != null
+                                                        ? post.getUpdatedAt().toInstant(ZoneOffset.UTC)
+                                                        : null)
+                                        .build();
+                }).toList();
         }
 
-        private AllPostsResponse mapToAllPostsResponse(Post post, User author, Space space, int answerCount) {
-
-                if (author == null) {
-                        throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND",
-                                        "Author not found for post: " + post.getId());
-                }
-                if (space == null) {
-                        throw new ApiException(HttpStatus.NOT_FOUND, "SPACE_NOT_FOUND",
-                                        "Space not found for post: " + post.getId());
-                }
-
-                List<AllPostsResponse.AnswerSummary> top3Answers = buildTop3Answers(post.getId());
-
-                return AllPostsResponse.builder()
-                                .postId(post.getId())
-                                .title(post.getTitle())
-                                .body(post.getBody())
-
-                                .authorId(author.getId())
-                                .authorName(author.getFullName())
-                                .authorAvatarUrl(author.getImageUrl())
-
-                                .spaceId(space.getId())
-                                .spaceName(space.getName())
-
-                                .goodQuestionCount(post.getGoodQuestionCount())
-                                .answerCount(answerCount)
-                                .viewCount(post.getViewCount())
-                                .solved(post.getIsSolved())
-
-                                .top3Answers(top3Answers)
-
-                                .createdAt(post.getCreatedAt().toInstant(ZoneOffset.UTC))
-                                .updatedAt(post.getUpdatedAt() != null
-                                                ? post.getUpdatedAt().toInstant(ZoneOffset.UTC)
-                                                : null)
-                                .build();
+        /**
+         * Builds a {@link Sort} from the supplied field name and direction, falling
+         * back to {@code createdAt DESC} for unknown values.
+         */
+        private Sort buildSort(String sortBy, String sortDir) {
+                Sort.Direction direction = "asc".equalsIgnoreCase(sortDir)
+                                ? Sort.Direction.ASC
+                                : Sort.Direction.DESC;
+                String field = (sortBy != null && POST_SORT_FIELDS.contains(sortBy)) ? sortBy : "createdAt";
+                return Sort.by(direction, field);
         }
 
         private List<AllPostsResponse.AnswerSummary> buildTop3Answers(UUID postId) {

@@ -50,7 +50,7 @@ public interface MaterialLinkRepository extends JpaRepository<MaterialLink, UUID
         @Transactional
         @Query("DELETE FROM MaterialLink ml WHERE ml.material.id = :materialId")
         void deleteByMaterialId(@Param("materialId") UUID materialId);
-        // ✅ Fix — push the increment into the database
+        //  Fix — push the increment into the database
 @Modifying
 @Query("UPDATE Material m SET m.linkCount = m.linkCount + 1 WHERE m.id = :id")
 void incrementLinkCount(@Param("id") UUID id);
@@ -58,4 +58,10 @@ void incrementLinkCount(@Param("id") UUID id);
 @Modifying
 @Query("UPDATE Material m SET m.linkCount = GREATEST(m.linkCount - 1, 0) WHERE m.id = :id")
 void decrementLinkCount(@Param("id") UUID id);
+
+        // Fetches all bookmarks for a specific user out of a given list of materials in
+        // ONE query
+        @Query("SELECT ml.material.id FROM MaterialLink ml WHERE ml.user.id = :userId AND ml.material.id IN :materialIds")
+        java.util.Set<UUID> findBookmarkedMaterialIds(@Param("userId") UUID userId,
+                        @Param("materialIds") java.util.List<UUID> materialIds);
 }
