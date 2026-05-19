@@ -5,6 +5,7 @@ import com.gp.GP_backend.domain.space.entity.SpaceMembership;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -42,4 +43,20 @@ public interface SpaceMembershipRepository extends JpaRepository<SpaceMembership
 
     @Query("SELECT m.user.id FROM SpaceMembership m WHERE m.space.id = :spaceId")
     List<UUID> findMembersIdsBySpaceId(UUID spaceId);
+
+    /**
+     * Eager-loads the Space (and its creator) for each membership to avoid N+1 queries
+     * when mapping to SpaceResponse.
+     */
+    @Query("SELECT m FROM SpaceMembership m JOIN FETCH m.space s LEFT JOIN FETCH s.createdBy WHERE m.user.id = :userId")
+    List<SpaceMembership> findByUserIdWithSpace(@Param("userId") UUID userId);
+
+    /**
+     * Single-query membership lookup with Space + Space.createdBy preloaded.
+     * Used to serve getSpaceById without triggering lazy-load fanout.
+     */
+    @Query("SELECT m FROM SpaceMembership m JOIN FETCH m.space s LEFT JOIN FETCH s.createdBy WHERE s.id = :spaceId AND m.user.id = :userId")
+    Optional<SpaceMembership> findBySpaceIdAndUserIdWithSpaceAndCreator(
+            @Param("spaceId") UUID spaceId,
+            @Param("userId") UUID userId);
 }

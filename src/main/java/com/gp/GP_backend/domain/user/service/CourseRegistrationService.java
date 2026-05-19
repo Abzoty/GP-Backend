@@ -38,6 +38,8 @@ public class CourseRegistrationService {
      */
     @Transactional
     public CourseRegistrationResponse registerCourse(User user, RegisterCourseRequest request) {
+        // Best-effort pre-check for a nicer 409 path; not a concurrency guarantee.
+        // Under races, the DB unique constraint + DataIntegrityViolationException catch below is the real guard.
         boolean alreadyRegistered = courseRegisteredRepository
                 .existsByUserIdAndCourseCodeAndAcademicYearAndSemester(
                         user.getId(),
@@ -104,8 +106,8 @@ public class CourseRegistrationService {
         CourseRegistered registration = getOwnedRegistration(registrationId, user.getId());
         courseRegisteredRepository.delete(registration);
     }
-
     /** Returns a specific course registration by its ID. */
+     @Transactional(readOnly = true)
     public CourseRegistrationResponse getCourseRegistration(UUID id, User currentUser) {
         CourseRegistered registration = getOwnedRegistration(id, currentUser.getId());
         return toResponse(registration);

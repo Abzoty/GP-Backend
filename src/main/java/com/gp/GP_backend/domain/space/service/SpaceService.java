@@ -158,7 +158,7 @@ public class SpaceService {
             membershipRepository.save(adminMembership);
         } catch (DataIntegrityViolationException ex) {
             throw new ApiException(HttpStatus.CONFLICT,
-                    "A space named '" + request.getName() + "' already exists");
+                    "Failed to create admin membership for the space creator");
         }
 
         return toResponse(space);
@@ -217,7 +217,11 @@ public class SpaceService {
      */
     @Transactional
     public void leaveSpace(UUID spaceId, User user) {
-        Space space = requireSpace(spaceId);
+        // Prevent TOCTOU race: two admins leaving concurrently must not both pass the adminCount check.
+        // Locking the Space row serializes the admin-count + delete sequence.
+        spaceRepository.findByIdForUpdate(spaceId)
+            .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                "Space not found with id: " + spaceId));
 
         SpaceMembership membership = membershipRepository.findBySpaceIdAndUserId(spaceId, user.getId())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
@@ -261,7 +265,7 @@ public class SpaceService {
         Space space = requireSpace(spaceId);
         requireAdminRole(spaceId, requester);
 
-        if (request.getName() != null) {
+        if (request.getName() != null && !request.getName().equals(space.getName())) {
             if (spaceRepository.existsByName(request.getName())) {
                 throw new ApiException(HttpStatus.CONFLICT,
                         "A space named '" + request.getName() + "' already exists");
@@ -309,7 +313,9 @@ public class SpaceService {
         SpaceMembership targetMembership = membershipRepository.findBySpaceIdAndUserId(spaceId, memberId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                         "User is not a member of this space"));
-
+        if (ROLE_ADMIN.equals(targetMembership.getRole())) {
+            return toMembershipResponse(targetMembership); // already an admin, no-op
+        }
         targetMembership.setRole(ROLE_ADMIN);
         return toMembershipResponse(membershipRepository.save(targetMembership));
     }
@@ -422,30 +428,32 @@ public class SpaceService {
         return candidate;
     }
 
+    @Transactional(readOnly = true)
     public boolean isMemberInSpace(UUID spaceId, UUID userId) {
         return membershipRepository.existsBySpaceIdAndUserId(spaceId, userId);
     }
 
     @Transactional(readOnly = true)
     public SpaceResponse getSpaceById(UUID spaceId, UUID userId) {
-        if (isMemberInSpace(spaceId, userId)) {
-            Space space = requireSpace(spaceId);
-            return toResponse(space);
-        }
-        throw new ApiException(HttpStatus.FORBIDDEN, "You are not a member of this space");
+        // Single round-trip: if membership exists, we fetch the Space + createdBy eagerly.
+        SpaceMembership membership = membershipRepository.findBySpaceIdAndUserIdWithSpaceAndCreator(spaceId, userId)
+                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "You are not a member of this space"));
+        return toResponse(membership.getSpace());
     }
 
     @Transactional(readOnly = true)
     public List<SpaceResponse> getSpacesByUserId(UUID userId) {
-        List<SpaceMembership> memberships = membershipRepository.findByUserId(userId);
+        // Fetch Space + createdBy in the same query to avoid N+1 lazy-loads in toResponse(...).
+        List<SpaceMembership> memberships = membershipRepository.findByUserIdWithSpace(userId);
         return memberships.stream()
                 .map(m -> toResponse(m.getSpace()))
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public List<SpaceResponse> getAllSpaces() {
-        List<Space> spaces = spaceRepository.findAllActiveSpaces();
+    public List<SpaceResponse> getActiveSpaces(int page, int size) {
+        List<Space> spaces = spaceRepository.findByIsActiveTrueOrderByCreatedAtDesc(PageRequest.of(page, size))
+                .getContent();
         return spaces.stream()
                 .map(this::toResponse)
                 .toList();

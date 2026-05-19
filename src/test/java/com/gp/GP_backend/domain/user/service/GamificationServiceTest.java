@@ -18,6 +18,7 @@ import com.gp.GP_backend.domain.user.repository.UserRepository;
 import com.gp.GP_backend.domain.user.repository.XpTransactionRepository;
 import com.gp.GP_backend.shared.exception.ApiException;
 import com.gp.GP_backend.shared.util.XpCalculator;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -44,6 +45,7 @@ class GamificationServiceTest {
     @Mock private GamificationProfileRepository gamificationProfileRepository;
     @Mock private XpTransactionRepository xpTransactionRepository;
     @Mock private UserRepository userRepository;
+        @Mock private EntityManager entityManager;
     @Mock private SpaceRepository spaceRepository;
     @Mock private SpaceMembershipRepository spaceMembershipRepository;
     @Mock private PostRepository postRepository;

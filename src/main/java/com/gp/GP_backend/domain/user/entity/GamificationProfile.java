@@ -13,9 +13,9 @@ import java.util.UUID;
  * aggregate counters.
  *
  * <p>
- * One-to-one with {@link User}. Created automatically when a new user registers
- * (handled in
- * {@link com.gp.GP_backend.domain.user.service.GamificationService}).
+ * One-to-one with {@link User}. Profiles are created lazily on first
+ * gamification interaction (e.g., first XP award) as a safe fallback for
+ * existing users.
  */
 @Entity
 @Table(name = "gamification_profiles")
@@ -83,11 +83,5 @@ public class GamificationProfile {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    /**
-     * Optimistic-lock version to prevent lost updates under concurrent XP writes.
-     */
-    @Version
-    @Column(name = "version", nullable = false)
-    @Builder.Default
-    private Long version = 0L;
+
 }

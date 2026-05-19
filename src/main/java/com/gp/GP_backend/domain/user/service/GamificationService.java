@@ -17,6 +17,9 @@ import com.gp.GP_backend.domain.user.repository.UserRepository;
 import com.gp.GP_backend.domain.user.repository.XpTransactionRepository;
 import com.gp.GP_backend.shared.exception.ApiException;
 import com.gp.GP_backend.shared.util.XpCalculator;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -70,12 +73,21 @@ public class GamificationService {
     private final PostRepository postRepository;
     private final AnswerRepository answerRepository;
     private final MaterialRepository materialRepository;
+     // Injected separately — EntityManager is transaction-scoped,
+    // not a singleton bean. @PersistenceContext provides a thread-safe
+    // proxy that routes to the correct instance per transaction.
+    @PersistenceContext
+    private EntityManager entityManager;
 
     // ─── Profile bootstrap ────────────────────────────────────────────────────
 
     /**
-     * Creates a blank {@link GamificationProfile} for a newly registered user.
-     * Called by {@link UserService#registerUser} within the same transaction.
+        * Creates a blank {@link GamificationProfile} for a user.
+        *
+        * <p>
+        * Note: profiles are normally created lazily on first gamification interaction.
+        * This method is kept as an optional bootstrap utility (e.g., migrations or
+        * future eager-creation at registration).
      *
      * @param user the freshly persisted user entity.
      */
@@ -194,13 +206,13 @@ public void revokeXp(UUID userId,
     // 🔻 Reverse counters
     switch (eventType) {
         case XpCalculator.EVENT_POST_CREATED ->
-                profile.setTotalPosts(profile.getTotalPosts() - 1);
+                profile.setTotalPosts(Math.max(0, profile.getTotalPosts() - 1));
         case XpCalculator.EVENT_ANSWER_GIVEN ->
-                profile.setTotalAnswers(profile.getTotalAnswers() - 1);
+                profile.setTotalAnswers(Math.max(0, profile.getTotalAnswers() - 1));
         case XpCalculator.EVENT_ANSWER_UPVOTED ->
-                profile.setTotalUpvotesReceived(profile.getTotalUpvotesReceived() - 1);
+                profile.setTotalUpvotesReceived(Math.max(0, profile.getTotalUpvotesReceived() - 1));
         case XpCalculator.EVENT_MATERIAL_SHARED ->
-                profile.setTotalMaterialsShared(profile.getTotalMaterialsShared() - 1);
+                profile.setTotalMaterialsShared(Math.max(0, profile.getTotalMaterialsShared() - 1));
         default -> {}
     }
 
@@ -286,19 +298,35 @@ public void revokeXp(UUID userId,
                                 .orElseGet(() -> {
                                         User userRef = userRepository.getReferenceById(userId);
                                         GamificationProfile created = GamificationProfile.builder().user(userRef).build();
-                                        return gamificationProfileRepository.save(created);
+                                        try {
+                                                return gamificationProfileRepository.save(created);
+                                        } catch (DataIntegrityViolationException ex) {
+                                                // Another concurrent request inserted the profile first.
+                                                return gamificationProfileRepository.findByUserId(userId)
+                                                                .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR,
+                                                                                "Failed to create gamification profile"));
+                                        }
                                 });
         }
 
         private GamificationProfile getOrCreateProfileForWrite(UUID userId) {
                 return gamificationProfileRepository.findByUserIdForUpdate(userId)
                                 .orElseGet(() -> {
-                                        // Create then re-lock to ensure a consistent write path.
                                         User userRef = userRepository.getReferenceById(userId);
-                                        gamificationProfileRepository.saveAndFlush(GamificationProfile.builder().user(userRef).build());
-                                        return gamificationProfileRepository.findByUserIdForUpdate(userId)
-                                                        .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR,
-                                                                        "Failed to create gamification profile"));
+
+                                        // Insert if missing, then take a pessimistic lock on the managed entity.
+                                        // If another request wins the insert race, fall back to the locked read path.
+                                        GamificationProfile created = GamificationProfile.builder().user(userRef).build();
+                                        try {
+                                                created = gamificationProfileRepository.saveAndFlush(created);
+                                        } catch (DataIntegrityViolationException ex) {
+                                                return gamificationProfileRepository.findByUserIdForUpdate(userId)
+                                                                .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR,
+                                                                                "Failed to create gamification profile"));
+                                        }
+
+                                        entityManager.lock(created, LockModeType.PESSIMISTIC_WRITE);
+                                        return created;
                                 });
         }
 
@@ -309,8 +337,9 @@ public void revokeXp(UUID userId,
                         UUID referenceId,
                         String referenceType) {
 
-                // Fast-path idempotency: avoid relying on catching a unique-constraint
-                // exception that may be raised later (e.g., on auto-flush).
+                // Best-effort fast-path: avoids a known-duplicate insert.
+                // This is NOT a correctness guarantee under concurrency; the real guard is the
+                // DB unique constraint on xp_transactions.event_key + the catch below.
                 if (xpTransactionRepository.existsByEventKey(eventKey)) {
                         return false;
                 }
@@ -337,6 +366,8 @@ public void revokeXp(UUID userId,
                         UUID referenceId,
                         String extra) {
 
+                // '|' is a safe separator here: UUID.toString() and our constant tokens don't contain it.
+                // The key is used for uniqueness/idempotency (not parsing), so `extra` may contain '|'.
                 String refType = (referenceType == null || referenceType.isBlank()) ? "-" : referenceType;
                 String refId = (referenceId == null) ? "-" : referenceId.toString();
                 String suffix = (extra == null || extra.isBlank()) ? "" : ("|" + extra);
@@ -368,7 +399,7 @@ public void revokeXp(UUID userId,
      */
     @Transactional(readOnly = true)
     public List<SystemLeaderboardEntry> getSystemLeaderboard(int limit) {
-        int safeLimit = Math.min(limit, 100);
+        int safeLimit = Math.max(1, Math.min(limit, 100));
         List<GamificationProfile> profiles = gamificationProfileRepository
                 .findTopWithUserOrderByXpDesc(PageRequest.of(0, safeLimit));
 
@@ -447,7 +478,7 @@ Map<UUID, Long> materialCounts = materialRepository
                 row -> (UUID) row[0],
                 row -> (Long)  row[1]));
 
-int safeLimit = Math.min(limit, 100);
+int safeLimit = Math.max(1, Math.min(limit, 100));
 
 //  CHANGE — the .map() now reads from the pre-built maps (no per-member queries)
 List<SpaceLeaderboardEntry> entries = memberships.stream()

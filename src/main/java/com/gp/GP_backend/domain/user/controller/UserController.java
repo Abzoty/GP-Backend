@@ -41,7 +41,9 @@ public class UserController {
     public ResponseEntity<ApiResponse<UserResponse>> viewProfile(
             @AuthenticationPrincipal User currentUser) {
 
-        // Entity already loaded by the JWT filter — no additional DB query needed
+        // Entity is loaded by the JWT filter — no additional DB query needed.
+        // Note: this instance may be slightly stale if the user record changed after authentication.
+        // We accept that trade-off to avoid a DB hit on every /profile call.
         UserResponse profile = modelMapper.map(currentUser, UserResponse.class);
         return ResponseEntity.ok(ApiResponse.ok("Profile retrieved", profile));
     }

@@ -38,7 +38,8 @@ class SpaceServiceTest {
         UUID spaceId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
 
-        when(membershipRepository.existsBySpaceIdAndUserId(spaceId, userId)).thenReturn(false);
+        when(membershipRepository.findBySpaceIdAndUserIdWithSpaceAndCreator(spaceId, userId))
+            .thenReturn(Optional.empty());
 
         ApiException ex = assertThrows(ApiException.class, () -> spaceService.getSpaceById(spaceId, userId));
 

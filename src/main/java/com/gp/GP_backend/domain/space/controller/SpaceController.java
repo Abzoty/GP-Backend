@@ -12,12 +12,17 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,6 +31,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Tag(name = "Spaces", description = "Space management, membership, and discovery")
 @SecurityRequirement(name = "bearerAuth")
+@Validated // Enables Bean Validation on @RequestParam (e.g., @Min/@Max). Without this, invalid page/size may throw 500 from PageRequest.
 public class SpaceController {
 
     private final SpaceService spaceService;
@@ -83,7 +89,7 @@ public class SpaceController {
 
     @GetMapping("/{spaceId}")
     @Operation(summary = "Retrieve a space by its UUID")
-    public ResponseEntity<ApiResponse<?>> getSpace(
+    public ResponseEntity<ApiResponse<SpaceResponse>> getSpace(
             @PathVariable UUID spaceId,
             @AuthenticationPrincipal User currentUser) {
         UUID userId = currentUser.getId();
@@ -91,19 +97,23 @@ public class SpaceController {
         return ResponseEntity.ok(ApiResponse.ok("Space retrieved successfully", space));
     }
 
-    @GetMapping("all-spaces")
+    @GetMapping("/all-spaces")
     @Operation(summary = "Retrieve all spaces for the authenticated user")
-    public ResponseEntity<ApiResponse<?>> getAllSpaces(
+    public ResponseEntity<ApiResponse<List<SpaceResponse>>> getAllSpaces(
             @AuthenticationPrincipal User currentUser) {
         UUID userId = currentUser.getId();
         List<SpaceResponse> spaces = spaceService.getSpacesByUserId(userId);
         return ResponseEntity.ok(ApiResponse.ok("Spaces retrieved successfully", spaces));
     }
 
-    @GetMapping("active-spaces")
-    @Operation(summary = "Retrieve all active spaces")
-    public ResponseEntity<ApiResponse<?>> getActiveSpaces() {
-        List<SpaceResponse> spaces = spaceService.getAllSpaces();
+    @GetMapping("/active-spaces")
+    @Operation(summary = "Retrieve active spaces (paginated)")
+    public ResponseEntity<ApiResponse<List<SpaceResponse>>> getActiveSpaces(
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            @RequestParam(defaultValue = "0")  @Min(0)            int page) {
+
+        // Pagination is required to avoid full table scans / large JSON payloads in production.
+        List<SpaceResponse> spaces = spaceService.getActiveSpaces(page, size);
         return ResponseEntity.ok(ApiResponse.ok("Spaces retrieved successfully", spaces));
     }
 
@@ -123,15 +133,15 @@ public class SpaceController {
      * @param page     zero-based page index (default 0).
      * @param size     page size (default 20).
      */
-    @GetMapping("search")
+    @GetMapping("/search")
     @Operation(summary = "Search active spaces by name/description with optional category filter and sort")
     public ResponseEntity<ApiResponse<List<SpaceResponse>>> searchSpaces(
             @RequestParam(required = false) String query,
             @RequestParam(required = false) SpaceCategory category,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            @RequestParam(defaultValue = "0")  @Min(0)            int page) {
 
         List<SpaceResponse> results = spaceService.searchSpaces(query, category, sortBy, sortDir, page, size);
         return ResponseEntity.ok(ApiResponse.ok("Spaces retrieved", results));
@@ -153,7 +163,12 @@ public class SpaceController {
             @AuthenticationPrincipal User currentUser) {
 
         MembershipResponse membership = spaceService.joinSpace(spaceId, currentUser);
-        return ResponseEntity.ok(ApiResponse.ok("Successfully joined the space", membership));
+
+        // A membership resource was created; use 201 Created + Location pointing to the space.
+        URI location = URI.create("/api/v1/spaces/" + spaceId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .header(HttpHeaders.LOCATION, location.toString())
+            .body(ApiResponse.ok("Successfully joined the space", membership));
     }
 
     // ─── Leave ────────────────────────────────────────────────────────────────
