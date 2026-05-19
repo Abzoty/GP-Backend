@@ -154,15 +154,7 @@ public class MaterialController {
         return ResponseEntity.ok(ApiResponse.ok("Material retrieved", response));
     }
 
-    @GetMapping("/space/{spaceId}")
-    @Operation(summary = "Get all materials in a space")
-    public ResponseEntity<ApiResponse<List<MaterialResponse>>> getMaterialsBySpace(
-            @PathVariable UUID spaceId,
-            @AuthenticationPrincipal User user) {
 
-        List<MaterialResponse> materials = materialService.getMaterialsBySpace(spaceId, user);
-        return ResponseEntity.ok(ApiResponse.ok("Materials retrieved", materials));
-    }
     // all materails endpoints with pagination
     @GetMapping("/space/{spaceId}/materials")
     public ResponseEntity<ApiResponse<Page<MaterialResponse>>> getMaterials(
