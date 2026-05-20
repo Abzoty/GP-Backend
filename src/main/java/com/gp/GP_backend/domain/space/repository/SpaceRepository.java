@@ -15,8 +15,120 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Collection;
 
 public interface SpaceRepository extends JpaRepository<Space, UUID> {
+
+    // =============================================================================
+    // ADD THE FOLLOWING FOUR METHODS TO SpaceRepository.java
+    // (inside the existing `public interface SpaceRepository extends
+    // JpaRepository<Space, UUID>`)
+    // =============================================================================
+
+    // ─── Recommendation — Layer 1 (Course Match) ──────────────────────────────
+
+    /**
+     * Finds all active {@code COLLEGE_COURSE} spaces whose {@code courseCode} is in
+     * {@code courseCodes} and that the given user has not yet joined.
+     *
+     * <p>
+     * Ordered by {@code memberCount} descending so the most popular matching course
+     * spaces surface first when all three have a score of 1.0.
+     *
+     * <p>
+     * Uses {@code NOT EXISTS} instead of {@code NOT IN} for better SQL Server
+     * performance on large membership tables.
+     */
+    @EntityGraph(attributePaths = { "createdBy" })
+    @Query("""
+            SELECT s FROM Space s
+            WHERE  s.isActive    = true
+              AND  s.category    = :category
+              AND  s.courseCode  IN :courseCodes
+              AND  NOT EXISTS (
+                       SELECT m FROM SpaceMembership m
+                       WHERE  m.space.id = s.id
+                         AND  m.user.id  = :userId
+                   )
+            ORDER BY s.memberCount DESC
+            """)
+    List<Space> findCollegeCourseSpacesNotJoined(
+            @Param("courseCodes") List<String> courseCodes,
+            @Param("userId") UUID userId,
+            @Param("category") SpaceCategory category);
+
+    // ─── Recommendation — Layer 3 (Text Similarity, user side) ───────────────
+
+    /**
+     * Returns all active spaces in any category <em>except</em>
+     * {@code excludeCategory}
+     * that the given user is currently a member of.
+     *
+     * <p>
+     * Used to build the reference token sets for Jaccard similarity scoring.
+     * {@code (s.category IS NULL OR s.category <> :excludeCategory)} correctly
+     * handles
+     * spaces that were created without a category.
+     */
+    @EntityGraph(attributePaths = { "createdBy" })
+    @Query("""
+            SELECT DISTINCT m.space FROM SpaceMembership m
+            WHERE  m.user.id          = :userId
+              AND  m.space.isActive   = true
+              AND  (m.space.category IS NULL OR m.space.category <> :excludeCategory)
+            """)
+    List<Space> findActiveNonCategorySpacesByUser(
+            @Param("userId") UUID userId,
+            @Param("excludeCategory") SpaceCategory excludeCategory);
+
+    // ─── Recommendation — Layer 3 (Text Similarity, candidate side) ──────────
+
+    /**
+     * Returns all active spaces in any category <em>except</em>
+     * {@code excludeCategory}
+     * that the given user has <em>not</em> yet joined.
+     *
+     * <p>
+     * These are the candidates compared against the user's token sets in Layer 3.
+     */
+    @EntityGraph(attributePaths = { "createdBy" })
+    @Query("""
+            SELECT s FROM Space s
+            WHERE  s.isActive = true
+              AND  (s.category IS NULL OR s.category <> :excludeCategory)
+              AND  NOT EXISTS (
+                       SELECT m FROM SpaceMembership m
+                       WHERE  m.space.id = s.id
+                         AND  m.user.id  = :userId
+                   )
+            """)
+    List<Space> findActiveNonCategorySpacesNotJoined(
+            @Param("userId") UUID userId,
+            @Param("excludeCategory") SpaceCategory excludeCategory);
+
+    // ─── Recommendation — Layer 2 (FoF batch load) ───────────────────────────
+
+    /**
+     * Batch-loads a list of spaces by their IDs, eagerly fetching their creators.
+     *
+     * <p>
+     * Called after the FoF native query returns (spaceId, score) pairs: rather than
+     * issuing one {@code SELECT} per space we consolidate into a single {@code IN}
+     * query.
+     *
+     * <p>
+     * <b>Caller must guard against an empty {@code ids} collection</b> — an empty
+     * {@code IN} clause is a SQL syntax error. The recommendation service checks
+     * this
+     * before calling.
+     */
+    @EntityGraph(attributePaths = { "createdBy" })
+    @Query("SELECT s FROM Space s WHERE s.id IN :ids")
+    List<Space> findAllByIdWithCreator(@Param("ids") Collection<UUID> ids);
+
+    // =============================================================================
+    // REQUIRED IMPORTS to add at the top of SpaceRepository.java
+    // =============================================================================
 
     /** Used to check slug uniqueness before creating a new space. */
     boolean existsBySlug(String slug);
@@ -63,7 +175,9 @@ public interface SpaceRepository extends JpaRepository<Space, UUID> {
     @Query("SELECT s FROM Space s WHERE s.id = :spaceId")
     Optional<Space> findByIdForUpdate(@Param("spaceId") UUID spaceId);
 
-    /** Atomically increments memberCount to avoid lost updates under concurrency. */
+    /**
+     * Atomically increments memberCount to avoid lost updates under concurrency.
+     */
     @Modifying
     @Query("UPDATE Space s SET s.memberCount = s.memberCount + 1 WHERE s.id = :spaceId")
     int incrementMemberCount(@Param("spaceId") UUID spaceId);
@@ -72,8 +186,9 @@ public interface SpaceRepository extends JpaRepository<Space, UUID> {
     @Modifying
     @Query("UPDATE Space s SET s.memberCount = CASE WHEN s.memberCount > 0 THEN s.memberCount - 1 ELSE 0 END WHERE s.id = :spaceId")
     int decrementMemberCount(@Param("spaceId") UUID spaceId);
+
     @Query("SELECT s.name FROM Space s WHERE s.id = :spaceId")
-    String findNameById(@Param("spaceId")UUID spaceId);
+    String findNameById(@Param("spaceId") UUID spaceId);
 
     /**
      * Full-text search across name and description with optional category filter.
