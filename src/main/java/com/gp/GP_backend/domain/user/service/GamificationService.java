@@ -325,7 +325,9 @@ public void revokeXp(UUID userId,
                                                                                 "Failed to create gamification profile"));
                                         }
 
-                                        entityManager.lock(created, LockModeType.PESSIMISTIC_WRITE);
+                                        if (entityManager != null) {
+                                                entityManager.lock(created, LockModeType.PESSIMISTIC_WRITE);
+                                        }
                                         return created;
                                 });
         }
