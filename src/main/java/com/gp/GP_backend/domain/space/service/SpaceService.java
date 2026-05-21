@@ -101,7 +101,7 @@ public class SpaceService {
                     resp.setSimilarityScore(score);
                     return resp;
                 })
-                .filter(r -> r.getSimilarityScore() > 0.0)
+                .filter(r -> r.getSimilarityScore() > 0.2) // threshold for "conflicting" similarity; tune as needed
                 .sorted(Comparator.comparingDouble(SpaceResponse::getSimilarityScore).reversed())
                 .toList();
     }
