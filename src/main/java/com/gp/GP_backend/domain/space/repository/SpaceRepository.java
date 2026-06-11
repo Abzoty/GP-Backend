@@ -149,6 +149,24 @@ public interface SpaceRepository extends JpaRepository<Space, UUID> {
     @EntityGraph(attributePaths = { "createdBy" })
     Page<Space> findByIsActiveTrueOrderByCreatedAtDesc(Pageable pageable);
 
+                /**
+                 * Returns popular active spaces the user has not already joined.
+                 * Ordered by member count and recency so the Java recommendation layer can
+                 * seed exploration candidates without scanning the full table.
+                 */
+                @EntityGraph(attributePaths = { "createdBy" })
+                @Query("""
+                                                SELECT s FROM Space s
+                                                WHERE s.isActive = true
+                                                        AND NOT EXISTS (
+                                                                                SELECT m FROM SpaceMembership m
+                                                                                WHERE m.space.id = s.id
+                                                                                        AND m.user.id = :userId
+                                                        )
+                                                ORDER BY s.memberCount DESC, s.createdAt DESC
+                                                """)
+                Page<Space> findPopularSpacesNotJoined(@Param("userId") UUID userId, Pageable pageable);
+
     /** returns all spaces that share the same course code, newest first. */
     @EntityGraph(attributePaths = { "createdBy" })
     List<Space> findByCourseCodeOrderByCreatedAtDesc(String courseCode);

@@ -288,16 +288,18 @@ Main responsibilities:
 
 ### 5.6 Recommendations
 
-This module is intended to call an external ML service for course and department recommendations.
+This module now has one implemented production flow and two planned ML-backed flows.
 
 Current state:
 
-- the controller and service classes exist,
-- the `RestClient` bean is configured,
-- but the business methods are still scaffolded and not yet implemented.
+- personalized space recommendations are implemented in `SpaceRecommendationService`,
+- the active endpoint returns ranked spaces using course match, social graph, and text similarity signals,
+- the course and department ML services are scaffolded and still depend on the external Python service,
+- the `RestClient` bean is configured for future ML calls.
 
 #### Main controller
 
+- `/api/v1/recommendations/spaces`
 - `/api/v1/recommendations`
 
 ## 6. API Surface
@@ -396,6 +398,7 @@ Main capabilities:
 
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/api/v1/recommendations/spaces` | Return personalized space recommendations |
 | Planned | `/api/v1/recommendations/courses` | Personalized course suggestions |
 | Planned | `/api/v1/recommendations/department` | Department prediction |
 
@@ -438,6 +441,16 @@ This is a strong defense against refresh token replay and token theft.
 - Joining increments member count.
 - Leaving decrements member count, but the sole admin cannot leave until another admin exists.
 - Admin promotion is explicit and only allowed for existing members.
+
+### Recommendation lifecycle
+
+- Space recommendations blend three independent signals:
+  - course-code overlap with the user's current registrations,
+  - friends-of-friends space overlap from existing memberships,
+  - Jaccard text similarity against spaces the user already belongs to.
+- Recommendations are ranked first by how many signals selected the space, then by combined score.
+- Each recommendation includes the recommended `Space`, a `methodCount`, a numeric `score`, and a set of `reasons`.
+- Course and department recommendation services are still placeholders for the external Python ML service.
 
 ### Post and answer lifecycle
 
@@ -676,7 +689,7 @@ The README notes the expected local startup sequence and the Swagger URL.
 
 The repository is functional, but a few areas are still incomplete or need attention from maintainers:
 
-- The recommendation module is scaffolded but not implemented yet.
+- Space recommendations are implemented, but the ML-backed course and department recommendation services are still scaffolded.
 - The notification controller currently mirrors the base path in each method mapping, which likely produces duplicated route prefixes.
 - Some notification flows are implemented in service code, but controller route naming should be reviewed before production exposure.
 - Production configuration is intentionally minimal and still needs environment-variable based secret management.

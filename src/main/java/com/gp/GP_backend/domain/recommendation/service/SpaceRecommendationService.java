@@ -1,251 +1,258 @@
 package com.gp.GP_backend.domain.recommendation.service;
 
+import com.gp.GP_backend.domain.recommendation.client.PythonRecommendationClient;
+import com.gp.GP_backend.domain.recommendation.dto.SpaceRankingResponse;
+import com.gp.GP_backend.domain.recommendation.dto.SpaceRecommendationRankRequest;
 import com.gp.GP_backend.domain.recommendation.dto.SpaceRecommendationResponse;
 import com.gp.GP_backend.domain.space.dto.SpaceResponse;
 import com.gp.GP_backend.domain.space.entity.Space;
 import com.gp.GP_backend.domain.space.entity.SpaceCategory;
+import com.gp.GP_backend.domain.space.entity.SpaceMembership;
 import com.gp.GP_backend.domain.space.repository.SpaceMembershipRepository;
 import com.gp.GP_backend.domain.space.repository.SpaceRepository;
 import com.gp.GP_backend.domain.user.entity.CourseRegistered;
+import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.domain.user.repository.CourseRegisteredRepository;
+import com.gp.GP_backend.domain.user.repository.UserRepository;
+import com.gp.GP_backend.shared.exception.ApiException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.*;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
-/**
- * Produces personalized space recommendations by blending three independent
- * signals.
- *
- * <h2>Layers</h2>
- * <ol>
- * <li><b>Course match (Layer 1)</b> — finds active {@code COLLEGE_COURSE}
- * spaces whose
- * {@code courseCode} is in the caller's registered-course list.
- * Score is binary: 1.0 per match.</li>
- * <li><b>Friends-of-friends (Layer 2)</b> — for every space the caller belongs
- * to,
- * collects all other members and then finds all other spaces those members have
- * joined. Score is the co-member overlap count, normalized to [0, 1].</li>
- * <li><b>Text similarity (Layer 3)</b> — for every active
- * non-{@code COLLEGE_COURSE}
- * space the caller has <em>not</em> joined, computes the maximum Jaccard
- * similarity
- * against the name+description of every space the caller already belongs to.
- * Spaces below {@link #TEXT_SIMILARITY_THRESHOLD} are discarded.</li>
- * </ol>
- *
- * <h2>Ranking</h2>
- * Candidates are sorted first by the number of layers that nominated them (more
- * = better
- * cross-validation), then by combined score as a tie-breaker.
- *
- * <h2>Performance characteristics (SQL Server + typical university data)</h2>
- * <ul>
- * <li>Layer 1: single indexed range scan — O(1).</li>
- * <li>Layer 2: 3-table self-join on indexed {@code (space_id, user_id)}
- * columns,
- * capped at {@value #FOF_QUERY_LIMIT} rows by the SQL query — sub-second.</li>
- * <li>Layer 3: O(U × C) Jaccard comparisons in Java, where U = user's
- * non-course space
- * count (typically &lt; 20) and C = active non-course spaces not yet joined.
- * HashSet intersection is O(min(|A|, |B|)) per pair — full run &lt; 50 ms for
- * 500 candidate spaces.</li>
- * </ul>
- */
 @Service
 @RequiredArgsConstructor
 public class SpaceRecommendationService {
 
-    // ─── Constants ────────────────────────────────────────────────────────────
+    private static final int MAX_COURSE_CANDIDATES = 100;
+    private static final int MAX_SOCIAL_CANDIDATES = 100;
+    private static final int MAX_POPULAR_CANDIDATES = 50;
+    private static final int MAX_REQUEST_CANDIDATES = 300;
 
-    private static final String REASON_COURSE = "COURSE_MATCH";
-    private static final String REASON_SOCIAL = "SOCIAL";
-    private static final String REASON_SIMILAR = "SIMILAR_CONTENT";
-
-    /**
-     * Minimum token length kept during tokenization.
-     * Discards articles/prepositions (e.g. "a", "in", "of") that add noise.
-     */
-    private static final int MIN_TOKEN_LENGTH = 3;
-
-    /**
-     * Minimum Jaccard coefficient required for a text-similarity nomination.
-     * Tuned to suppress accidental single-word overlaps on short descriptions.
-     */
-    private static final double TEXT_SIMILARITY_THRESHOLD = 0.2;
-
-
-    // ─── Dependencies ─────────────────────────────────────────────────────────
-
-    private final SpaceRepository spaceRepository;
-    private final SpaceMembershipRepository membershipRepository;
+    private final UserRepository userRepository;
     private final CourseRegisteredRepository courseRegisteredRepository;
-    // ─── Public API ───────────────────────────────────────────────────────────
+    private final SpaceMembershipRepository membershipRepository;
+    private final SpaceRepository spaceRepository;
+    private final PythonRecommendationClient recommendationClient;
 
-    /**
-     * Computes personalized recommendations for the given user.
-     *
-     * @param userId      the authenticated user's UUID.
-     * @param topN        maximum number of results to return.
-     * @return up to {@code topN} recommendations, ranked by method count then
-     *         score.
-     */
     @Transactional(readOnly = true)
     public List<SpaceRecommendationResponse> recommend(UUID userId, int topN) {
+        // Clamp topN to a safe range: minimum 1, maximum 50
+        int safeTopN = Math.max(1, Math.min(topN, 50));
 
+        // Load user from database; throw 404 if not found
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found with id: " + userId));
 
-        // Accumulator: spaceId → candidate record that merges scores across layers.
-        Map<UUID, RecommendationCandidate> candidates = new HashMap<>();
+        // Step 1: Gather user context
+        // Get current course codes for course-match candidate generation
+        List<String> currentCourses = getCurrentCourseCodes(userId);
+        // Load all spaces the user is already a member of (to exclude from recommendations)
+        List<SpaceMembership> memberships = membershipRepository.findByUserIdWithSpace(userId);
 
-        scoreByCourseCodes(userId, candidates); // Layer 1
-        scoreBySocialNetwork(userId, candidates); // Layer 2
-        scoreByTextSimilarity(userId, candidates); // Layer 3
+        // Create a snapshot of joined spaces to send to the Python ranking service
+        List<JoinedSpaceSnapshot> joinedSpaces = memberships.stream()
+                .map(membership -> JoinedSpaceSnapshot.from(membership.getSpace()))
+                .toList();
 
-        return candidates.values().stream()
-                .sorted(
-                        Comparator.<RecommendationCandidate>comparingInt(RecommendationCandidate::methodCount)
-                                .thenComparingDouble(RecommendationCandidate::totalScore)
-                                .reversed())
-                .limit(topN)
-                .map(this::toRecommendationResponse)
+        // Step 2: Candidate Generation (Java-side)
+        // Use a LinkedHashMap to preserve insertion order and deduplicate spaces by ID
+        Map<UUID, CandidateSpace> candidateMap = new LinkedHashMap<>();
+        // Generate candidates from user's current courses
+        collectCourseCandidates(userId, candidateMap, currentCourses);
+        // Generate candidates from "friends of friends" social graph
+        collectSocialCandidates(userId, candidateMap);
+        // Generate popular/trending candidates as fallback
+        collectPopularCandidates(userId, candidateMap);
+
+        // Step 3: Candidate Selection and Prioritization
+        // Sort candidates by relevance heuristics (multi-source hits, member count, recency, name)
+        // Cap the candidate list to MAX_REQUEST_CANDIDATES before sending to Python for ranking
+        List<CandidateSpace> selectedCandidates = candidateMap.values().stream()
+                .sorted(candidateComparator())
+                .limit(MAX_REQUEST_CANDIDATES)
+                .toList();
+
+        // Bail early if no candidates are available
+        if (selectedCandidates.isEmpty()) {
+            return List.of();
+        }
+
+        // Step 4: Build request payload for Python ranking service
+        // Include user context (ID, courses, already-joined spaces) and bounded candidate list
+        SpaceRecommendationRankRequest request = SpaceRecommendationRankRequest.builder()
+                .user(SpaceRecommendationRankRequest.UserContext.builder()
+                        .id(user.getId())
+                        .courses(currentCourses)
+                        .joinedSpaces(joinedSpaces.stream()
+                                .map(JoinedSpaceSnapshot::toRequest)
+                                .toList())
+                        .build())
+                .candidateSpaces(selectedCandidates.stream()
+                        .map(CandidateSpace::toRequest)
+                        .toList())
+                .build();
+
+        // Step 5: Call Python ranking service (stateless, reads-only, no DB access)
+        // Python receives the candidates and user context, returns ranked space IDs with scores
+        List<SpaceRankingResponse> rankedResults = recommendationClient.rankSpaces(request);
+        // Bail early if Python returned no results
+        if (rankedResults.isEmpty()) {
+            return List.of();
+        }
+
+        // Step 6: Build lookup maps for efficient merging
+        // Map space IDs to candidate metadata (sources, etc.)
+        Map<UUID, CandidateSpace> candidateLookup = selectedCandidates.stream()
+                .collect(Collectors.toMap(CandidateSpace::spaceId, candidate -> candidate));
+
+        // Extract ranked space IDs in order from Python response, filtering out any unknowns
+        List<UUID> rankedIds = rankedResults.stream()
+                .map(SpaceRankingResponse::getSpaceId)
+                .filter(candidateLookup::containsKey)
+                .toList();
+
+        // Bail early if no ranked results pass the filtering step
+        if (rankedIds.isEmpty()) {
+            return List.of();
+        }
+
+        // Map space IDs to scores from Python response (used to include ranking score in response)
+        Map<UUID, Double> scoreLookup = rankedResults.stream()
+                .filter(result -> result.getSpaceId() != null && result.getScore() != null)
+                .collect(Collectors.toMap(SpaceRankingResponse::getSpaceId, SpaceRankingResponse::getScore,
+                        (first, second) -> first));
+
+        // Fetch full Space entities from DB using eager-load query to include creator information
+        Map<UUID, Space> spaceLookup = spaceRepository.findAllByIdWithCreator(rankedIds).stream()
+                .collect(Collectors.toMap(Space::getId, space -> space));
+
+        // Step 7: Merge Python rankings with Space data fetched from DB
+        // Iterate through ranked IDs to preserve Python's ranking order during merge
+        List<SpaceRecommendationResponse> responses = new ArrayList<>();
+        for (UUID spaceId : rankedIds) {
+            // Safely retrieve candidate, space, and score; skip if any piece is missing
+            CandidateSpace candidate = candidateLookup.get(spaceId);
+            Space space = spaceLookup.get(spaceId);
+            Double score = scoreLookup.get(spaceId);
+            if (candidate == null || space == null || score == null) {
+                continue;
+            }
+            // Build response DTO with Python score and recommendation source metadata
+            responses.add(toResponse(space, score, candidate.sources));
+            // Stop early once we have enough results
+            if (responses.size() == safeTopN) {
+                break;
+            }
+        }
+
+        // Step 8: Sort final responses by score (descending) to ensure consistent ordering
+        // Secondary sort by method count (multi-source hits ranked higher)
+        // Tertiary sort by space name (deterministic tie-breaker)
+        Comparator<SpaceRecommendationResponse> rankingComparator = Comparator
+                .comparingDouble(SpaceRecommendationResponse::getScore).reversed()
+                .thenComparing(Comparator.comparingInt(SpaceRecommendationResponse::getMethodCount).reversed())
+                .thenComparing((left, right) -> compareSpaces(left.getSpace(), right.getSpace()));
+
+        return responses.stream()
+                .sorted(rankingComparator)
                 .toList();
     }
 
-
-    // ─── Layer 1 : Course match ───────────────────────────────────────────────
-
     /**
-     * Nominates every active {@code COLLEGE_COURSE} space whose {@code courseCode}
-     * appears in {@code courseCodes} and that the user has not yet joined.
-     * Each match receives a fixed score of 1.0.
+     * Collect candidate spaces based on the user's current course enrollments.
+     * Finds spaces associated with the user's courses that they haven't already joined.
      */
-    private void scoreByCourseCodes(UUID userId,
-            Map<UUID, RecommendationCandidate> out) {
-
-        List<String> courseCodes = getCurrentCourseCodes(userId);
-
-        if (courseCodes == null || courseCodes.isEmpty())
-            return;
-
-        List<String> trimmed = courseCodes.stream()
-                .filter(c -> c != null && !c.isBlank())
+    private void collectCourseCandidates(UUID userId, Map<UUID, CandidateSpace> out, List<String> courseCodes) {
+        // Normalize course codes: trim whitespace, convert to uppercase, remove duplicates and blanks
+        List<String> normalized = courseCodes.stream()
+                .filter(code -> code != null && !code.isBlank())
                 .map(String::trim)
+                .map(code -> code.toUpperCase(Locale.ROOT))
+                .distinct()
                 .toList();
-        if (trimmed.isEmpty())
-            return;
 
-        spaceRepository
-                .findCollegeCourseSpacesNotJoined(trimmed, userId, SpaceCategory.COLLEGE_COURSE)
-                .forEach(space -> candidate(out, space).add(REASON_COURSE, 1.0));
+        // Skip course candidate collection if user has no current courses
+        if (normalized.isEmpty()) {
+            return;
+        }
+
+        // Query DB for college course spaces matching user's enrollments (excluding already-joined)
+        // Cap results to MAX_COURSE_CANDIDATES to avoid overwhelming the candidate pool
+        spaceRepository.findCollegeCourseSpacesNotJoined(normalized, userId, SpaceCategory.COLLEGE_COURSE).stream()
+                .limit(MAX_COURSE_CANDIDATES)
+                .forEach(space -> candidate(out, space).addSource(RecommendationSource.COURSE_MATCH));
     }
 
-    // ─── Layer 2 : Friends-of-friends (social graph) ──────────────────────────
-
     /**
-     * Nominates spaces joined by co-members of the user's existing spaces.
-     *
-     * <p>
-     * The FoF query (native SQL) returns up to {@value #FOF_QUERY_LIMIT} rows of
-     * (spaceId, coMemberCount) ordered by count descending. Scores are normalized
-     * to
-     * [0, 1] relative to the highest count in the result set, so the most socially
-     * endorsed candidate always scores 1.0.
-     *
-     * <p>
-     * Spaces are batch-loaded in a single {@code IN} query to avoid N+1 fetches.
+     * Collect candidate spaces based on social graph:
+     * Finds spaces that are popular among users similar to the current user.
+     * Implements "friends of friends" recommendation: if many of your peers are in a space, it's likely relevant.
      */
-    private void scoreBySocialNetwork(UUID userId, Map<UUID, RecommendationCandidate> out) {
-
+    private void collectSocialCandidates(UUID userId, Map<UUID, CandidateSpace> out) {
+        // Query DB for "friends of friends" space scores (spaces popular among similar users)
         List<Object[]> rows = membershipRepository.findFofSpaceScores(userId);
-        if (rows.isEmpty())
+        if (rows.isEmpty()) {
             return;
+        }
 
-        // Normalize: highest count → 1.0
-        long maxCount = rows.stream()
-                .mapToLong(r -> ((Number) r[1]).longValue())
-                .max()
-                .orElse(1L);
-
-        // Extract IDs for the batch load (preserve order for correlation with scores)
-        List<UUID> spaceIds = rows.stream()
-                .map(r -> toUUID(r[0]))
+        // Cap social candidates to MAX_SOCIAL_CANDIDATES
+        List<Object[]> limitedRows = rows.stream()
+                .limit(MAX_SOCIAL_CANDIDATES)
                 .toList();
 
-        // Single IN-query to avoid N+1. Guard against empty list (not possible here,
-        // but defensive).
-        Map<UUID, Space> spaceMap = spaceRepository
-                .findAllByIdWithCreator(spaceIds)
-                .stream()
-                .collect(Collectors.toMap(Space::getId, s -> s));
+        // Extract space IDs from the query results (each row[0] is a space ID)
+        List<UUID> spaceIds = limitedRows.stream()
+                .map(row -> toUuid(row[0]))
+                .toList();
 
-        for (Object[] row : rows) {
-            UUID spaceId = toUUID(row[0]);
-            Space space = spaceMap.get(spaceId);
-            if (space == null)
-                continue; // space became inactive between query and load
+        // Fetch full Space entities from DB (eager-load creator info for response building)
+        Map<UUID, Space> spaceLookup = spaceRepository.findAllByIdWithCreator(spaceIds).stream()
+                .collect(Collectors.toMap(Space::getId, space -> space));
 
-            double normalized = ((Number) row[1]).doubleValue() / maxCount;
-            candidate(out, space).add(REASON_SOCIAL, normalized);
+        // Map each space ID to its CandidateSpace, adding SOCIAL source tag
+        for (Object[] row : limitedRows) {
+            UUID spaceId = toUuid(row[0]);
+            Space space = spaceLookup.get(spaceId);
+            if (space == null) {
+                continue;
+            }
+            candidate(out, space).addSource(RecommendationSource.SOCIAL);
         }
     }
 
-    // ─── Layer 3 : Text similarity (Jaccard) ──────────────────────────────────
-
     /**
-     * Nominates active non-{@code COLLEGE_COURSE} spaces that are textually similar
-     * to at least one space the user already belongs to.
-     *
-     * <p>
-     * <b>Algorithm:</b>
-     * <ol>
-     * <li>Load the user's existing non-course spaces and tokenize each
-     * name+description
-     * once — this set is small and is reused for every candidate comparison.</li>
-     * <li>Load all active non-course spaces the user has <em>not</em> joined.</li>
-     * <li>For each candidate, compute Jaccard against every user-space token set
-     * and
-     * keep the maximum. Candidates scoring below
-     * {@value #TEXT_SIMILARITY_THRESHOLD} are silently discarded.</li>
-     * </ol>
+     * Collect candidate spaces based on popularity and recency.
+     * Serves as a fallback recommendation source: trending/active spaces are likely valuable.
+     * Uses pagination to fetch top MAX_POPULAR_CANDIDATES sorted by member count (descending) and creation date.
      */
-    private void scoreByTextSimilarity(UUID userId, Map<UUID, RecommendationCandidate> out) {
-
-        List<Space> userSpaces = spaceRepository
-                .findActiveNonCategorySpacesByUser(userId, SpaceCategory.COLLEGE_COURSE);
-        if (userSpaces.isEmpty())
-            return;
-
-        // Pre-tokenize user's spaces once; skip empty token sets
-        List<Set<String>> userTokenSets = userSpaces.stream()
-                .map(s -> tokenize(s.getName(), s.getDescription()))
-                .filter(t -> !t.isEmpty())
-                .toList();
-        if (userTokenSets.isEmpty())
-            return;
-
-        spaceRepository
-                .findActiveNonCategorySpacesNotJoined(userId, SpaceCategory.COLLEGE_COURSE)
-                .forEach(candidate -> {
-                    Set<String> candidateTokens = tokenize(candidate.getName(), candidate.getDescription());
-                    if (candidateTokens.isEmpty())
-                        return;
-
-                    // Score = max Jaccard similarity against any of the user's existing spaces
-                    double bestScore = userTokenSets.stream()
-                            .mapToDouble(userTokens -> jaccard(userTokens, candidateTokens))
-                            .max()
-                            .orElse(0.0);
-
-                    if (bestScore >= TEXT_SIMILARITY_THRESHOLD) {
-                        candidate(out, candidate).add(REASON_SIMILAR, bestScore);
-                    }
-                });
+    private void collectPopularCandidates(UUID userId, Map<UUID, CandidateSpace> out) {
+        // Query DB for popular spaces the user hasn't joined
+        // Sort by memberCount descending (most popular first), then by createdAt (newer spaces first as tie-breaker)
+        // Use pagination to efficiently fetch exactly MAX_POPULAR_CANDIDATES
+        spaceRepository.findPopularSpacesNotJoined(userId,
+                        PageRequest.of(0, MAX_POPULAR_CANDIDATES,
+                                Sort.by(Sort.Direction.DESC, "memberCount", "createdAt")))
+                .getContent()
+                // Add each popular space to the candidate pool with POPULAR source tag
+                .forEach(space -> candidate(out, space).addSource(RecommendationSource.POPULAR));
     }
-
-    // ─── Private helpers ──────────────────────────────────────────────────────
 
     private List<String> getCurrentCourseCodes(UUID userId) {
         return courseRegisteredRepository.findByUserIdAndIsCurrentTrue(userId).stream()
@@ -253,140 +260,201 @@ public class SpaceRecommendationService {
                 .filter(Objects::nonNull)
                 .map(String::trim)
                 .filter(code -> !code.isBlank())
+                .distinct()
                 .toList();
     }
 
-    /**
-     * Returns the existing candidate for this space, or creates a new one.
-     * Using a helper keeps the lambda bodies in Layer 1–3 clean.
-     */
-    private static RecommendationCandidate candidate(Map<UUID, RecommendationCandidate> map, Space space) {
-        return map.computeIfAbsent(space.getId(), id -> new RecommendationCandidate(space));
+    private static CandidateSpace candidate(Map<UUID, CandidateSpace> map, Space space) {
+        return map.computeIfAbsent(space.getId(), id -> new CandidateSpace(space));
     }
 
     /**
-     * Safely converts a raw JDBC object (String or UUID) returned from a native
-     * query
-     * to a {@link UUID}. SQL Server JDBC returns {@code UNIQUEIDENTIFIER} as a
-     * {@link String} in native query results.
+     * Defines the sorting order for candidates before sending to Python.
+     * Prioritizes by: multi-source hits > member count > recency > name (for determinism).
      */
-    private static UUID toUUID(Object raw) {
+    private static Comparator<CandidateSpace> candidateComparator() {
+        // Primary: spaces matching multiple recommendation sources rank higher
+        return Comparator.comparingInt(CandidateSpace::sourceCount).reversed()
+                // Secondary: spaces with more members are more established/valuable
+                .thenComparing(Comparator.comparingInt(CandidateSpace::memberCount).reversed())
+                // Tertiary: more recently active spaces rank higher
+                .thenComparing(Comparator.comparing(CandidateSpace::lastActivityDate,
+                        Comparator.nullsLast(Comparator.naturalOrder())).reversed())
+                // Quaternary: newer spaces rank higher (creation date)
+                .thenComparing(Comparator.comparing(CandidateSpace::createdAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())).reversed())
+                // Quinary: space name (alphabetical) as final deterministic tie-breaker
+                .thenComparing(CandidateSpace::spaceName, String.CASE_INSENSITIVE_ORDER);
+    }
+
+    private static UUID toUuid(Object raw) {
         return (raw instanceof UUID) ? (UUID) raw : UUID.fromString(raw.toString());
     }
 
     /**
-     * Jaccard similarity coefficient between two pre-computed token sets.
-     *
-     * <p>
-     * {@code J(A,B) = |A ∩ B| / |A ∪ B|}
-     *
-     * <p>
-     * Uses the identity {@code |A ∪ B| = |A| + |B| - |A ∩ B|} to avoid
-     * materializing the union set, making this O(min(|A|, |B|)).
+     * Compares two spaces by name (case-insensitive) for deterministic tie-breaking.
+     * Used in final response sorting when scores are equal.
      */
-    private static double jaccard(Set<String> a, Set<String> b) {
-        if (a.isEmpty() && b.isEmpty())
-            return 0.0;
-
-        long intersection = a.stream().filter(b::contains).count();
-        long union = (long) a.size() + b.size() - intersection;
-
-        return union == 0 ? 0.0 : (double) intersection / union;
+    private static int compareSpaces(SpaceResponse left, SpaceResponse right) {
+        if (left == null && right == null) {
+            return 0;
+        }
+        if (left == null) {
+            return 1;
+        }
+        if (right == null) {
+            return -1;
+        }
+        String leftName = left.getName() != null ? left.getName() : "";
+        String rightName = right.getName() != null ? right.getName() : "";
+        return String.CASE_INSENSITIVE_ORDER.compare(leftName, rightName);
     }
 
     /**
-     * Splits the combined name + description text into a lowercase word-token set.
-     * Tokens shorter than {@value #MIN_TOKEN_LENGTH} characters are dropped to
-     * suppress high-frequency noise words.
+     * Builds a response DTO from a Space entity, Python ranking score, and recommendation sources.
+     * Includes the score from Python and metadata about why this space was recommended.
      */
-    private static Set<String> tokenize(String name, String description) {
-        String text = (name == null ? "" : name)
-                + " "
-                + (description == null ? "" : description);
-        if (text.isBlank())
-            return Collections.emptySet();
-
-        return Arrays.stream(text.toLowerCase(Locale.ROOT).split("[^a-z0-9]+"))
-                .filter(token -> token.length() >= MIN_TOKEN_LENGTH)
-                .collect(Collectors.toSet());
-    }
-
-    /**
-     * Maps a {@link RecommendationCandidate} to its public response DTO.
-     * The {@code reasons} set is a copy to prevent external mutation.
-     */
-    private SpaceRecommendationResponse toRecommendationResponse(RecommendationCandidate c) {
+    private static SpaceRecommendationResponse toResponse(Space space, double score, Set<RecommendationSource> sources) {
         return SpaceRecommendationResponse.builder()
-                .space(toSpaceResponse(c.space))
-                .methodCount(c.methodCount())
-                .score(c.totalScore())
-                .reasons(Set.copyOf(c.methodScores.keySet()))
+                // Convert Space entity to response DTO (includes creator info, category, etc.)
+                .space(toSpaceResponse(space))
+                // Ranking score from Python service (higher = more relevant to this user)
+                .score(score)
+                // Count of distinct recommendation sources (COURSE_MATCH, SOCIAL, POPULAR)
+                .methodCount(sources.size())
+                // List of recommendation source names for explanation/transparency to client
+                .reasons(sources.stream().map(Enum::name).collect(Collectors.toCollection(java.util.LinkedHashSet::new)))
                 .build();
     }
 
     /**
-     * Converts a {@link Space} entity to a {@link SpaceResponse} DTO.
-     *
-     * <p>
-     * Intentionally duplicated from {@code SpaceService} rather than creating
-     * a shared mapper dependency, keeping recommendation logic self-contained.
-     * {@code createdBy} is accessed here — callers must ensure it is loaded
-     * (all repository methods in this service use {@code @EntityGraph}).
+     * Converts a Space entity to a SpaceResponse DTO for API serialization.
+     * Includes space metadata, creator info, and engagement metrics.
      */
     private static SpaceResponse toSpaceResponse(Space space) {
         return SpaceResponse.builder()
+                // Space identifiers
                 .id(space.getId())
                 .name(space.getName())
                 .slug(space.getSlug())
+                // Space categorization and course link (if applicable)
                 .description(space.getDescription())
                 .category(space.getCategory() != null ? space.getCategory().name() : null)
                 .courseCode(space.getCourseCode())
+                // Creator/author information
                 .createdById(space.getCreatedBy() != null ? space.getCreatedBy().getId() : null)
                 .createdByName(space.getCreatedBy() != null ? space.getCreatedBy().getFullName() : null)
+                // Space status and engagement metrics
                 .isActive(space.getIsActive())
                 .memberCount(space.getMemberCount())
                 .createdAt(space.getCreatedAt())
                 .build();
     }
 
-    // ─── Internal value type ──────────────────────────────────────────────────
+    private enum RecommendationSource {
+        COURSE_MATCH,
+        SOCIAL,
+        POPULAR
+    }
 
     /**
-     * Accumulates scores from multiple recommendation layers for a single candidate
-     * space.
-     *
-     * <p>
-     * Using a {@link LinkedHashMap} for {@code methodScores} preserves insertion
-     * order
-     * so {@code reasons} always appears in a stable order in the response.
-     *
-     * <p>
-     * If two layers provide the same reason with different scores (not currently
-     * possible but defensive), {@link Math#max} keeps the higher one.
+     * Internal DTO: tracks a candidate space and which recommendation sources qualified it.
+     * Used during candidate generation phase before sending to Python.
      */
-    private static final class RecommendationCandidate {
+    private static final class CandidateSpace {
+        private final Space space;
+        // EnumSet tracks which methods recommended this space (COURSE_MATCH, SOCIAL, POPULAR)
+        private final EnumSet<RecommendationSource> sources = EnumSet.noneOf(RecommendationSource.class);
 
-        final Space space;
-        final Map<String, Double> methodScores = new LinkedHashMap<>();
-
-        RecommendationCandidate(Space space) {
+        private CandidateSpace(Space space) {
             this.space = space;
         }
 
-        /** Records a nomination from one recommendation layer. */
-        void add(String reason, double score) {
-            methodScores.merge(reason, score,
-                    (existing, incoming) -> existing == null ? incoming : Double.max(existing, incoming));
+        /**
+         * Mark this candidate as recommended by a particular source.
+         * Spaces matching multiple sources get higher priority during ranking.
+         */
+        private void addSource(RecommendationSource source) {
+            sources.add(source);
         }
 
-        /** Number of distinct layers that nominated this space. */
-        int methodCount() {
-            return methodScores.size();
+        // Accessor methods for comparator chain
+        private UUID spaceId() {
+            return space.getId();
         }
 
-        /** Sum of all layer scores — used as a tie-breaker in ranking. */
-        double totalScore() {
-            return methodScores.values().stream().mapToDouble(d -> d).sum();
+        // Space name for deterministic tie-breaking in candidate ordering
+        private String spaceName() {
+            return space.getName();
+        }
+
+        // Number of distinct recommendation sources (1-3 range)
+        private int sourceCount() {
+            return sources.size();
+        }
+
+        // Engagement metric: member count (null-safe)
+        private int memberCount() {
+            return Optional.ofNullable(space.getMemberCount()).orElse(0);
+        }
+
+        // Recency metric: date portion of creation timestamp
+        private LocalDate lastActivityDate() {
+            return space.getCreatedAt() == null ? null : space.getCreatedAt().toLocalDate();
+        }
+
+        // Exact creation timestamp for secondary sorting
+        private java.time.LocalDateTime createdAt() {
+            return space.getCreatedAt();
+        }
+
+        /**
+         * Converts this candidate to a request DTO for the Python ranking service.
+         * Includes space ID, title, description, and engagement metrics.
+         */
+        private SpaceRecommendationRankRequest.CandidateSpace toRequest() {
+            return SpaceRecommendationRankRequest.CandidateSpace.builder()
+                    .id(space.getId())
+                    .title(space.getName())
+                    .description(space.getDescription())
+                    .memberCount(space.getMemberCount())
+                    .lastActivityDate(lastActivityDate())
+                    .build();
+        }
+    }
+
+    /**
+     * Internal DTO: snapshot of a space the user has already joined.
+     * Sent to Python so the ranking service knows which spaces are "already consumed" by this user.
+     * Used to avoid recommending spaces the user is already a member of.
+     */
+    private static final class JoinedSpaceSnapshot {
+        private final UUID id;
+        private final String title;
+        private final String description;
+
+        private JoinedSpaceSnapshot(UUID id, String title, String description) {
+            this.id = id;
+            this.title = title;
+            this.description = description;
+        }
+
+        /**
+         * Factory method: creates a snapshot from a Space entity.
+         */
+        private static JoinedSpaceSnapshot from(Space space) {
+            return new JoinedSpaceSnapshot(space.getId(), space.getName(), space.getDescription());
+        }
+
+        /**
+         * Converts this snapshot to a request DTO for the Python ranking service.
+         */
+        private SpaceRecommendationRankRequest.JoinedSpace toRequest() {
+            return SpaceRecommendationRankRequest.JoinedSpace.builder()
+                    .id(id)
+                    .title(title)
+                    .description(description)
+                    .build();
         }
     }
 }
