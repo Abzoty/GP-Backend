@@ -60,7 +60,7 @@ public class PasswordResetService {
     private static final long MIN_RESET_EXPIRY_MS = 60_000L; // 1 minute
     private static final long MAX_RESET_EXPIRY_MS = 86_400_000L; // 24 hours
 
-    @Value("${app.frontend-url:http://localhost:5173}")
+    @Value("${app.frontend-url:http://localhost:5173/reset-password}")
     private String frontendUrl;
 
     @Value("${reset.token-expiration-ms}")
