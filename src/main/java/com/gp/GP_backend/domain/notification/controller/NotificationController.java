@@ -38,7 +38,7 @@ public class NotificationController {
     // TODO: inject NotificationService
     private final NotificationService notificationService;
 
-    @GetMapping("/api/v1/notifications/all-notifications")
+    @GetMapping("/all-notifications")
     @Operation(summary = "Get notifications for a user with pagination")
     public ResponseEntity<ApiResponse<PagedResponse<NotificationResponse>>> getNotifications(
             @AuthenticationPrincipal User user,
@@ -49,7 +49,7 @@ public class NotificationController {
         return ResponseEntity.ok(ApiResponse.ok("Notifications fetched successfully", PagedResponse.of(notifications)));
     }
 
-    @PutMapping("/api/v1/notifications/mark-read/{notificationId}")
+    @PutMapping("/mark-read/{notificationId}")
     @Operation(summary = "Mark a notification as read")
     public ResponseEntity<ApiResponse<Void>> markNotificationAsRead(
             @AuthenticationPrincipal User user,
@@ -60,7 +60,7 @@ public class NotificationController {
     }
 
 
-    @PutMapping("/api/v1/notifications/toggle-email")
+    @PutMapping("/toggle-email")
     @Operation(summary = "Toggle email notifications")
     public ResponseEntity<ApiResponse<Void>>toggleEmailNotificationAvailability(
             @AuthenticationPrincipal User user
@@ -70,7 +70,7 @@ public class NotificationController {
     }
 
 
-    @PutMapping("/api/v1/notifications/toggle-inapp")
+    @PutMapping("/toggle-inapp")
     @Operation(summary = "Toggle in-app notifications")
     public ResponseEntity<ApiResponse<Void>>toggleAppNotificationAvailability(
             @AuthenticationPrincipal User user
