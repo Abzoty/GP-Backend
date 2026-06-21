@@ -297,3 +297,19 @@ CREATE TABLE notifications (
     CONSTRAINT FK_Notif_Sender    FOREIGN KEY (sender_id)    REFERENCES users(id)
 );
 GO
+CREATE TABLE online_courses (
+    id               NVARCHAR(500)   NOT NULL PRIMARY KEY,
+    course_code      NVARCHAR(30)    NOT NULL,
+    course_name      NVARCHAR(300)   NOT NULL,
+    source           NVARCHAR(50)    NOT NULL,
+    title            NVARCHAR(300)   NOT NULL,
+    url              NVARCHAR(1024)  NULL,
+    description      NVARCHAR(2000)  NULL,
+    rating           FLOAT           NULL,
+    reviews          INT             NULL,
+    price            FLOAT           NULL,
+    score            FLOAT           NULL,
+    last_updated     DATETIME2       NOT NULL DEFAULT GETDATE(),
+
+    INDEX idx_online_courses_code (course_code)
+);
