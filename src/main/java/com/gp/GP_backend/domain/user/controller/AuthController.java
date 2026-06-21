@@ -11,6 +11,8 @@ import com.gp.GP_backend.security.JwtTokenProvider;
 import com.gp.GP_backend.shared.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.modelmapper.ModelMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +37,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
+@Slf4j
 public class AuthController {
 
         private final UserService userService;
@@ -89,7 +92,12 @@ public class AuthController {
                                 .build();
 
 
-                gamificationService.trackDailyLogin(user.getId());
+                        //  Fix — isolate gamification from the auth result
+                        try {
+                        gamificationService.trackDailyLogin(user.getId());
+                        } catch (Exception ex) {
+                        log.warn("Gamification tracking failed ...", user.getId(), ex.getMessage());
+                        }
 
                 return ResponseEntity.ok(ApiResponse.ok("Login successful", body));
         }

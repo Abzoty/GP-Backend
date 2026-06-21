@@ -8,6 +8,7 @@ import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.domain.user.repository.CourseRegisteredRepository;
 import com.gp.GP_backend.shared.exception.ApiException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +38,8 @@ public class CourseRegistrationService {
      */
     @Transactional
     public CourseRegistrationResponse registerCourse(User user, RegisterCourseRequest request) {
+        // Best-effort pre-check for a nicer 409 path; not a concurrency guarantee.
+        // Under races, the DB unique constraint + DataIntegrityViolationException catch below is the real guard.
         boolean alreadyRegistered = courseRegisteredRepository
                 .existsByUserIdAndCourseCodeAndAcademicYearAndSemester(
                         user.getId(),
@@ -59,7 +62,12 @@ public class CourseRegistrationService {
                 .isCurrent(true) // active enrollment by default
                 .build();
 
-        return toResponse(courseRegisteredRepository.save(registration));
+        try {
+            return toResponse(courseRegisteredRepository.save(registration));
+        } catch (DataIntegrityViolationException ex) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Course '" + request.getCourseCode() + "' is already registered for this period");
+        }
     }
 
     /**
@@ -98,8 +106,8 @@ public class CourseRegistrationService {
         CourseRegistered registration = getOwnedRegistration(registrationId, user.getId());
         courseRegisteredRepository.delete(registration);
     }
-
     /** Returns a specific course registration by its ID. */
+     @Transactional(readOnly = true)
     public CourseRegistrationResponse getCourseRegistration(UUID id, User currentUser) {
         CourseRegistered registration = getOwnedRegistration(id, currentUser.getId());
         return toResponse(registration);
@@ -160,6 +168,7 @@ public class CourseRegistrationService {
                 .semester(entity.getSemester())
                 .academicYear(entity.getAcademicYear())
                 .grade(entity.getGrade())
+                .result(entity.getResult())
                 .isCurrent(entity.getIsCurrent())
                 .build();
     }

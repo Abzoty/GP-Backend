@@ -14,7 +14,11 @@ import java.util.UUID;
  * based on what courses the user is currently taking or has taken.
  */
 @Entity
-@Table(name = "courses_registered")
+@Table(
+    name = "courses_registered",
+    uniqueConstraints = @UniqueConstraint(name = "uk_course_registration_period", columnNames = {
+        "user_id", "course_code", "academic_year", "semester"
+    }))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -48,7 +52,7 @@ public class CourseRegistered {
     @Column(length = 5)
     private String grade;
 
-    @Column(name = "result", precision = 3, scale = 1)
+    @Column(name = "result", precision = 4, scale = 1)
     private BigDecimal result;
     /**
      * True if the student is currently enrolled in this course.

@@ -2,7 +2,9 @@ package com.gp.GP_backend.domain.user.dto;
 
 import java.math.BigDecimal;
 
-import jakarta.persistence.Column;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -23,7 +25,9 @@ public class UpdateCourseRegistrationRequest {
     private String grade;
 
     /** Final result (e.g. 85.5, 99.0, 43.6). Null while the course is in progress. */
-    @Column(name = "result", precision = 3, scale = 1)
+    @DecimalMin(value = "0.0", inclusive = true, message = "Result must be at least 0.0")
+    @DecimalMax(value = "100.0", inclusive = true, message = "Result must be at most 100.0")
+    @Digits(integer = 3, fraction = 1, message = "Result must have up to 1 decimal place")
     private BigDecimal result;
 
     /**

@@ -34,3 +34,7 @@ build/
 
 ## uploaded files
 uploads/
+
+
+# Local environment variables (never commit this file!)
+.env

@@ -32,7 +32,17 @@ import java.util.UUID;
  * </ul>
  */
 @Entity
-@Table(name = "votes")
+@Table(
+    name = "votes",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_vote_user_target",
+            columnNames = { "user_id", "target_type", "target_id" })
+    },
+    indexes = {
+        @Index(name = "idx_vote_target", columnList = "target_type,target_id"),
+        @Index(name = "idx_vote_user", columnList = "user_id")
+    })
 @Getter
 @Setter
 @NoArgsConstructor

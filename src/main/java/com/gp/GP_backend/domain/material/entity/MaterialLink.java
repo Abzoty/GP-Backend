@@ -9,7 +9,17 @@ import java.util.UUID;
 
 
 @Entity
-@Table(name = "material_links")
+@Table(
+    name = "material_links",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_material_link_material_user",
+            columnNames = { "material_id", "user_id" })
+    },
+    indexes = {
+        @Index(name = "idx_material_link_user", columnList = "user_id"),
+        @Index(name = "idx_material_link_material", columnList = "material_id")
+    })
 @Getter
 @Setter
 @NoArgsConstructor

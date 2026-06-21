@@ -20,6 +20,8 @@ import com.gp.GP_backend.shared.util.XpCalculator;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -27,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -53,119 +56,144 @@ public class MaterialService {
         // ─── Upload file ──────────────────────────────────────────────────────────
 
         @Transactional
-        public MaterialResponse uploadFile(UUID spaceId,
-                        String title,
-                        String description,
-                        MultipartFile file,
-                        User uploader) {
-                Space space = requireMemberSpace(spaceId, uploader.getId());
+ public MaterialResponse uploadFile(UUID spaceId,
+            String title,
+            String description,
+            MultipartFile file,
+            User uploader) {
+        Space space = requireMemberSpace(spaceId, uploader.getId());
 
-                // store() validates type and size, then writes to disk and returns the filename
-                String filename = fileStorageService.store(file);
+        // store() validates type and size, then writes to disk and returns the filename
+        String filename = fileStorageService.store(file);
 
-                // Safe: store() already validated the type, so get() will not fail
-                AcceptedFileType fileType = AcceptedFileType.fromMimeType(file.getContentType()).get();
-                int fileSizeKb = (int) Math.ceil(file.getSize() / 1024.0);
+        // Safe: store() already validated the type, so get() will not fail
+        AcceptedFileType fileType = AcceptedFileType.fromMimeType(file.getContentType()).get();
+        int fileSizeKb = (int) Math.ceil(file.getSize() / 1024.0);
 
-                Material material = Material.builder()
-                                .space(space)
-                                .uploadedBy(uploader)
-                                .title(title.trim())
-                                .description(description)
-                                .resourceType(fileType.name()) // e.g. "PDF", "DOCX"
-                                .url(filename) // stored filename on disk
-                                .fileSizeKb(fileSizeKb)
-                                .build();
+        Material material = Material.builder()
+                .space(space)
+                .uploadedBy(uploader)
+                .title(title.trim())
+                .description(description)
+                .resourceType(fileType.name()) // e.g. "PDF", "DOCX"
+                .url(filename) // stored filename on disk
+                .fileSizeKb(fileSizeKb)
+                .build();
+try{
 
-                Material saved = materialRepository.save(material);
-                notificationService.notifyNewMaterialShared(saved, uploader);
+        Material saved = materialRepository.save(material);
+        notificationService.notifyNewMaterialShared(saved, uploader);
 
-                gamificationService.awardXp(
-                                uploader.getId(),
-                                XpCalculator.EVENT_MATERIAL_SHARED,
-                                XpCalculator.XP_MATERIAL_SHARED,
-                                saved.getId(),
-                                XpCalculator.REF_MATERIAL);
+        gamificationService.awardXp(
+                uploader.getId(),
+                XpCalculator.EVENT_MATERIAL_SHARED,
+                XpCalculator.XP_MATERIAL_SHARED,
+                saved.getId(),
+                XpCalculator.REF_MATERIAL);
 
-                return toResponse(saved, false);
+        return toResponse(saved, false);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ApiException(HttpStatus.CONFLICT, "You have already uploaded a file with the same name in this space");
         }
+    }
+
+
+
 
         // ─── Share link ────────────────────────────────────────────────────────────
 
-        @Transactional
-        public MaterialResponse shareLink(UUID spaceId, ShareLinkRequest request, User uploader) {
-                Space space = requireMemberSpace(spaceId, uploader.getId());
+       @Transactional
+    public MaterialResponse shareLink(UUID spaceId, ShareLinkRequest request, User uploader) {
+        Space space = requireMemberSpace(spaceId, uploader.getId());
 
-                Material material = Material.builder()
-                                .space(space)
-                                .uploadedBy(uploader)
-                                .title(request.getTitle().trim())
-                                .description(request.getDescription())
-                                .resourceType(RESOURCE_TYPE_LINK)
-                                .url(request.getUrl())
-                                .fileSizeKb(null) // links have no file size
-                                .build();
+        Material material = Material.builder()
+                .space(space)
+                .uploadedBy(uploader)
+                .title(request.getTitle().trim())
+                .description(request.getDescription())
+                .resourceType(RESOURCE_TYPE_LINK)
+                .url(request.getUrl())
+                .fileSizeKb(null) // links have no file size
+                .build();
+try{
 
-                Material saved = materialRepository.save(material);
-                notificationService.notifyNewMaterialShared(saved, uploader);
+        Material saved = materialRepository.save(material);
+        notificationService.notifyNewMaterialShared(saved, uploader);
 
-                gamificationService.awardXp(
-                                uploader.getId(),
-                                XpCalculator.EVENT_MATERIAL_SHARED,
-                                XpCalculator.XP_MATERIAL_SHARED,
-                                saved.getId(),
-                                XpCalculator.REF_MATERIAL);
-
+        gamificationService.awardXp(
+                uploader.getId(),
+                XpCalculator.EVENT_MATERIAL_SHARED,
+                XpCalculator.XP_MATERIAL_SHARED,
+                saved.getId(),
+                XpCalculator.REF_MATERIAL);
                 return toResponse(saved, false);
+                } catch (DataIntegrityViolationException ex) {
+            throw new ApiException(HttpStatus.CONFLICT, "You have already shared this link in this space");
         }
+    }
+
+
+
 
         // ─── Bookmark (add) ────────────────────────────────────────────────────────
 
-        @Transactional
-        public void bookmark(UUID materialId, User user) {
-                Material material = requireMaterial(materialId);
-                requireMember(material.getSpace().getId(), user.getId());
+            @Transactional
+    public void bookmark(UUID materialId, User user) {
+        Material material = requireMaterial(materialId);
+        requireMember(material.getSpace().getId(), user.getId());
 
-                if (materialLinkRepository.existsByMaterialIdAndUserId(materialId, user.getId())) {
-                        throw new ApiException(HttpStatus.CONFLICT, "You have already bookmarked this material");
-                }
+        if (materialLinkRepository.existsByMaterialIdAndUserId(materialId, user.getId())) {
+            throw new ApiException(HttpStatus.CONFLICT, "You have already bookmarked this material");
+        }
+        MaterialLink link = MaterialLink.builder()
+                .material(material)
+                .user(user)
+                .build();
+        try {
+            MaterialLink savedLink = materialLinkRepository.save(link);
 
-                MaterialLink link = MaterialLink.builder()
-                                .material(material)
-                                .user(user)
-                                .build();
-                materialLinkRepository.save(link);
+            materialLinkRepository.incrementLinkCount(materialId);
 
-                // Increment the denormalized bookmark counter
-                material.setLinkCount(material.getLinkCount() + 1);
-                materialRepository.save(material);
-
-                // Award the material's owner, not the person bookmarking
+            // Award the material owner only when another user bookmarks it.
+            UUID ownerId = material.getUploadedBy().getId();
+            if (!ownerId.equals(user.getId())) {
+                // Use the bookmark row ID as reference so multiple different users
+                // can bookmark the same material and each award XP once.
                 gamificationService.awardXp(
-                                material.getUploadedBy().getId(),
-                                XpCalculator.EVENT_MATERIAL_LINKED,
-                                XpCalculator.XP_MATERIAL_LINKED,
-                                materialId,
-                                XpCalculator.REF_MATERIAL);
+                        ownerId,
+                        XpCalculator.EVENT_MATERIAL_LINKED,
+                        XpCalculator.XP_MATERIAL_LINKED,
+                        savedLink.getId(),
+                        XpCalculator.REF_BOOKMARK);
+            }
+        } catch (DataIntegrityViolationException ex) {
+            throw new ApiException(HttpStatus.CONFLICT, "You have already bookmarked this material");
         }
-
-        // ─── Bookmark (remove) ────────────────────────────────────────────────────
+    }
 
         @Transactional
-        public void unbookmark(UUID materialId, User user) {
-                Material material = requireMaterial(materialId);
-                requireMember(material.getSpace().getId(), user.getId());
+    public void unbookmark(UUID materialId, User user) {
+        Material material = requireMaterial(materialId);
+        requireMember(material.getSpace().getId(), user.getId());
 
-                MaterialLink link = materialLinkRepository.findByMaterialIdAndUserId(materialId, user.getId())
-                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
-                                                "You have not bookmarked this material"));
+        MaterialLink link = materialLinkRepository.findByMaterialIdAndUserId(materialId, user.getId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                        "You have not bookmarked this material"));
 
-                materialLinkRepository.delete(link);
-
-                // Decrement the counter, guarding against going below zero
-                material.setLinkCount(Math.max(0, material.getLinkCount() - 1));
-                materialRepository.save(material);
+        UUID ownerId = material.getUploadedBy().getId();
+        if (!ownerId.equals(user.getId())) {
+            gamificationService.revokeXp(
+                ownerId,
+                XpCalculator.EVENT_MATERIAL_LINKED,
+                link.getId(),
+                XpCalculator.REF_BOOKMARK);
         }
+
+        materialLinkRepository.delete(link);
+
+        // Decrement the counter, guarding against going below zero
+        materialLinkRepository.decrementLinkCount(materialId);
+    }
 
         // ─── Edit ─────────────────────────────────────────────────────────────────
 
@@ -173,24 +201,81 @@ public class MaterialService {
         public MaterialResponse editMaterial(UUID materialId, EditMaterialRequest request, User user) {
                 Material material = requireMaterial(materialId);
 
-                if (!material.getUploadedBy().getId().equals(user.getId())) {
-                        throw new ApiException(HttpStatus.FORBIDDEN,
-                                        "Only the uploader can edit this material");
-                }
-
-                Optional.ofNullable(request.getTitle())
-                                .filter(t -> !t.isBlank())
-                                .map(String::trim)
-                                .ifPresent(material::setTitle);
-
-                Optional.ofNullable(request.getDescription())
-                                .ifPresent(material::setDescription);
-
-                Material saved = materialRepository.save(material);
-                boolean isBookmarked = materialLinkRepository.existsByMaterialIdAndUserId(materialId, user.getId());
-
-                return toResponse(saved, isBookmarked);
+                        if (!material.getUploadedBy().getId().equals(user.getId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN,
+                    "Only the uploader can edit this material");
         }
+
+        Optional.ofNullable(request.getTitle())
+                .filter(t -> !t.isBlank())
+                .map(String::trim)
+                .ifPresent(material::setTitle);
+
+        Optional.ofNullable(request.getDescription())
+                .ifPresent(material::setDescription);
+
+        Material saved = materialRepository.save(material);
+        boolean isBookmarked = materialLinkRepository.existsByMaterialIdAndUserId(materialId, user.getId());
+
+        return toResponse(saved, isBookmarked);
+}
+
+
+    /**
+     * Returns all materials in a space ordered by creation date (newest first).
+     * The isBookmarked flag on each item reflects the requesting user's bookmark
+     * state,
+     * so the frontend can render bookmark icons without extra calls.
+     */
+    @Transactional(readOnly = true)
+    public List<MaterialResponse> getMaterialsBySpace(UUID spaceId, User user) {
+        requireMemberSpace(spaceId, user.getId());
+        Set<UUID> bookmarkedMaterialIds = new HashSet<>(
+            materialLinkRepository.findByUserIdAndSpaceId(user.getId(), spaceId)
+                .stream()
+                .map(link -> link.getMaterial().getId())
+                .toList());
+
+        return materialRepository.findBySpaceIdOrderByCreatedAtDesc(spaceId)
+                .stream()
+            .map(m -> toResponse(m, bookmarkedMaterialIds.contains(m.getId())))
+                .toList();
+    }
+
+        // CHANGE — add the size cap inside the service as a second line of defence
+    @Transactional(readOnly = true)
+    public Page<MaterialResponse> getMaterialsBySpacePaged(UUID spaceId, User user, int page, int size) {
+        requireMemberSpace(spaceId, user.getId());
+
+        //  ADD — never trust the caller, cap inside the service too
+        int safeSize = Math.min(size, 50);
+
+        Set<UUID> bookmarkedMaterialIds = new HashSet<>(
+            materialLinkRepository.findByUserIdAndSpaceId(user.getId(), spaceId)
+                .stream()
+                .map(link -> link.getMaterial().getId())
+                .toList());
+
+        //  CHANGE — use safeSize instead of size
+        return materialRepository.findBySpaceIdOrderByCreatedAtDesc(spaceId, PageRequest.of(page, safeSize))
+            .map(m -> toResponse(m, bookmarkedMaterialIds.contains(m.getId())));
+    }
+
+    // Returns only the materials bookmarked by the requesting user in a specific space.
+    // Returns only the materials bookmarked by the requesting user in a specific
+    // space.
+   // CHANGE to paginated
+    @Transactional(readOnly = true)
+    public Page<MaterialResponse> getBookmarkedMaterials(UUID spaceId, User user, int page, int size) {
+        requireMemberSpace(spaceId, user.getId());
+        int safeSize = Math.min(size, 50);
+        return materialLinkRepository
+                .findByUserIdAndSpaceId(user.getId(), spaceId, PageRequest.of(page, safeSize))
+                .map(link -> toResponse(link.getMaterial(), true));
+    }
+
+               
+        
 
         // ─── Delete ───────────────────────────────────────────────────────────────
 
@@ -231,22 +316,7 @@ public class MaterialService {
          * state,
          * so the frontend can render bookmark icons without extra calls.
          */
-        @Transactional(readOnly = true)
-        public List<MaterialResponse> getMaterialsBySpace(UUID spaceId, User user) {
-                requireMemberSpace(spaceId, user.getId());
 
-                List<Material> materials = materialRepository.findBySpaceIdOrderByCreatedAtDesc(spaceId);
-                if (materials.isEmpty())
-                        return List.of();
-
-                // Fetch all bookmarks in one query
-                List<UUID> materialIds = materials.stream().map(Material::getId).toList();
-                Set<UUID> bookmarkedIds = materialLinkRepository.findBookmarkedMaterialIds(user.getId(), materialIds);
-
-                return materials.stream()
-                                .map(m -> toResponse(m, bookmarkedIds.contains(m.getId())))
-                                .toList();
-        }
 
         /**
          * Searches materials in a space for title/description with optional filters for

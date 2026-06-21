@@ -4,6 +4,7 @@ import com.gp.GP_backend.domain.user.entity.RefreshToken;
 import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.domain.user.repository.RefreshTokenRepository;
 import com.gp.GP_backend.shared.exception.ApiException;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -47,6 +48,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class RefreshTokenService {
 
+    private static final long MIN_REFRESH_EXPIRATION_MS = 60_000L; // 1 minute
+    private static final long MAX_REFRESH_EXPIRATION_MS = 2_592_000_000L; // 30 days
+
     @Value("${jwt.refresh-expiration-ms}")
     private long refreshExpirationMs;
 
@@ -57,6 +61,18 @@ public class RefreshTokenService {
      * propagation is honoured by Spring's proxy. See class-level Javadoc.
      */
     private final TokenFamilyRevoker tokenFamilyRevoker;
+
+    @PostConstruct
+    void validateRefreshExpiration() {
+        if (refreshExpirationMs < MIN_REFRESH_EXPIRATION_MS || refreshExpirationMs > MAX_REFRESH_EXPIRATION_MS) {
+            throw new IllegalStateException(
+                    "jwt.refresh-expiration-ms must be between "
+                            + MIN_REFRESH_EXPIRATION_MS
+                            + " and "
+                            + MAX_REFRESH_EXPIRATION_MS
+                            + " milliseconds");
+        }
+    }
 
     /**
      * Issues a brand-new refresh token for a user after login.
@@ -99,7 +115,7 @@ public class RefreshTokenService {
      */
     @Transactional
     public RefreshToken rotateRefreshToken(String oldTokenValue) {
-        RefreshToken oldToken = refreshTokenRepository.findByToken(oldTokenValue)
+        RefreshToken oldToken = refreshTokenRepository.findByTokenForUpdate(oldTokenValue)
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Invalid refresh token"));
 
         // Reuse detected — a token that was already consumed is being presented again.
@@ -141,7 +157,7 @@ public class RefreshTokenService {
      */
     @Transactional
     public void revokeTokenForUser(String tokenValue, User currentUser) {
-        RefreshToken token = refreshTokenRepository.findByToken(tokenValue)
+        RefreshToken token = refreshTokenRepository.findByTokenForUpdate(tokenValue)
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Invalid refresh token"));
 
         if (!token.getUser().getId().equals(currentUser.getId())) {

@@ -1,7 +1,5 @@
 package com.gp.GP_backend.domain.user.service;
 
-import com.gp.GP_backend.domain.notification.entity.NotificationPreference;
-import com.gp.GP_backend.domain.notification.repository.NotificationPreferencesRepository;
 import com.gp.GP_backend.domain.user.dto.RegisterRequest;
 import com.gp.GP_backend.domain.user.dto.UpdateProfileRequest;
 import com.gp.GP_backend.domain.user.entity.User;
@@ -9,7 +7,9 @@ import com.gp.GP_backend.domain.user.repository.UserRepository;
 import com.gp.GP_backend.shared.exception.ApiException;
 import com.gp.GP_backend.shared.util.EmailService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,13 +28,13 @@ import java.util.UUID;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final ModelMapper modelMapper;
     private final EmailService emailService;
-    private final NotificationPreferencesRepository notificationPreferencesRepository;
 
     /**
      * Registers a new user account.
@@ -58,6 +58,9 @@ public class UserService {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new ApiException(HttpStatus.CONFLICT, "Email is already registered");
         }
+        if (request.getStudentId() != null && userRepository.existsByStudentId(request.getStudentId())) {
+            throw new ApiException(HttpStatus.CONFLICT, "Student ID is already registered");
+        }
 
         // Map all matching fields; passwordHash is skipped (configured in
         // ModelMapperConfig)
@@ -66,17 +69,20 @@ public class UserService {
         // Encode the raw password — never store plain text
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
 
-        User saved = userRepository.save(user);
-        notificationPreferencesRepository.save(
-            NotificationPreference.builder()
-                .user(saved)
-                .email(true)
-                .inApp(true)
-                .build()
-        );
+        User saved;
+        try {
+            saved = userRepository.save(user);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Email or Student ID is already registered");
+        }
 
         // Fire-and-forget email; failure is logged but does not fail the request
-        emailService.sendWelcomeEmail(saved.getEmail(), saved.getFullName());
+        try {
+            emailService.sendWelcomeEmail(saved.getEmail(), saved.getFullName());
+        } catch (Exception ex) {
+            log.warn("Welcome email failed for user {}", saved.getId(), ex);
+        }
 
         return saved;
     }

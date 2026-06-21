@@ -1,10 +1,14 @@
 package com.gp.GP_backend.shared.exception;
 
 import com.gp.GP_backend.shared.response.ApiResponse;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -38,6 +42,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleValidation(MethodArgumentNotValidException ex) {
         String errors = ex.getBindingResult().getFieldErrors().stream()
                 .map(e -> e.getField() + ": " + e.getDefaultMessage())
+                .collect(Collectors.joining(", "));
+        return ResponseEntity.badRequest().body(ApiResponse.fail(errors));
+    }
+
+    /**
+     * Handles Bean Validation failures on request parameters (e.g., @RequestParam @Min/@Max).
+     * Requires the controller to be annotated with @Validated.
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(ConstraintViolationException ex) {
+        String errors = ex.getConstraintViolations().stream()
+                .map(v -> v.getPropertyPath() + ": " + v.getMessage())
                 .collect(Collectors.joining(", "));
         return ResponseEntity.badRequest().body(ApiResponse.fail(errors));
     }
@@ -82,6 +98,26 @@ public class GlobalExceptionHandler {
             org.springframework.web.server.ResponseStatusException ex) {
         return ResponseEntity.status(ex.getStatusCode())
                 .body(ApiResponse.fail(ex.getReason()));
+    }
+
+    /**
+     * Handles optimistic-lock conflicts (typically from entities with {@code @Version}).
+     * This can happen under real concurrency; clients may retry safely.
+     */
+    @ExceptionHandler({ OptimisticLockingFailureException.class, ObjectOptimisticLockingFailureException.class })
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLocking(Exception ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.fail("Conflict detected. Please retry the request."));
+    }
+
+    /**
+     * Handles DB integrity violations that were not converted to {@link ApiException}.
+     * We intentionally return a generic message to avoid leaking DB details.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIntegrityViolation(DataIntegrityViolationException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.fail("Request conflicts with existing data."));
     }
 
 

@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.UUID;
 
 public interface AnswerRepository extends JpaRepository<Answer, UUID> {
@@ -30,16 +31,26 @@ public interface AnswerRepository extends JpaRepository<Answer, UUID> {
         void incrementUpvoteCount(@Param("id") UUID id);
 
         @Modifying
-        @Query("UPDATE Answer a SET a.isAccepted = true WHERE a.id = :id")
-        void markAsAccepted(@Param("id") UUID answerId);
+        @Query("UPDATE Answer a SET a.upvoteCount = CASE WHEN a.upvoteCount > 0 THEN a.upvoteCount - 1 ELSE 0 END WHERE a.id = :id")
+        void decrementUpvoteCount(@Param("id") UUID id);
+
+        @Modifying
+        @Query("UPDATE Answer a SET a.isAccepted = true WHERE a.id = :id AND a.isAccepted = false")
+        int markAsAccepted(@Param("id") UUID answerId);
+
+        @Modifying
+        @Query("UPDATE Answer a SET a.isAccepted = false WHERE a.id = :id AND a.isAccepted = true")
+        int unmarkAsAccepted(@Param("id") UUID answerId);
 
         int countByPostId(UUID postId);
 
         @Query("SELECT COUNT(a) FROM Answer a WHERE a.postId = :postId")
         int getAnswerCountByPostId(UUID postId);
 
+    @Query("SELECT a.postId, COUNT(a) FROM Answer a WHERE a.postId IN :postIds GROUP BY a.postId")
+    List<Object[]> countByPostIds(@Param("postIds") List<UUID> postIds);
         @Query("SELECT u.fullName FROM Answer a, User u WHERE a.id = :answerId AND a.authorId = u.id")
-        String findAuthorNameByAnswerId(UUID answerId);
+        String findAuthorNameByAnswerId(@Param("answerId") UUID answerId);
 
         @Modifying
         @Transactional
@@ -57,6 +68,15 @@ public interface AnswerRepository extends JpaRepository<Answer, UUID> {
                         AND a.postId IN (SELECT p.id FROM Post p WHERE p.spaceId = :spaceId)
                         """)
         int countByAuthorIdInSpace(@Param("userId") UUID userId, @Param("spaceId") UUID spaceId);
+         @Query("""
+        SELECT a.authorId, COUNT(a)
+        FROM Answer a
+        JOIN Post p ON a.postId = p.id
+        WHERE p.spaceId = :spaceId
+        GROUP BY a.authorId
+        """)
+        List<Object[]> countBySpaceIdGroupByAuthor(@Param("spaceId") UUID spaceId);
+    
 
         // Fetches answer counts for multiple posts in ONE query
         @Query("SELECT a.postId, COUNT(a) FROM Answer a WHERE a.postId IN :postIds GROUP BY a.postId")

@@ -1,6 +1,9 @@
 package com.gp.GP_backend.domain.material.repository;
 
 import com.gp.GP_backend.domain.material.entity.MaterialLink;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -24,6 +27,17 @@ public interface MaterialLinkRepository extends JpaRepository<MaterialLink, UUID
         List<MaterialLink> findByUserIdAndSpaceId(
                         @Param("userId") UUID userId,
                         @Param("spaceId") UUID spaceId);
+                //  ADD — paginated version of the same query
+                @Query("""
+                                SELECT ml FROM MaterialLink ml
+                                WHERE ml.user.id = :userId
+                                AND ml.material.space.id = :spaceId
+                                ORDER BY ml.linkedAt DESC
+                                """)
+                Page<MaterialLink> findByUserIdAndSpaceId(
+                                @Param("userId") UUID userId,
+                                @Param("spaceId") UUID spaceId,
+                                Pageable pageable);
 
         // Duplicate-bookmark guard: checks whether a user has already bookmarked a material.
         boolean existsByMaterialIdAndUserId(UUID materialId, UUID userId);
@@ -36,6 +50,14 @@ public interface MaterialLinkRepository extends JpaRepository<MaterialLink, UUID
         @Transactional
         @Query("DELETE FROM MaterialLink ml WHERE ml.material.id = :materialId")
         void deleteByMaterialId(@Param("materialId") UUID materialId);
+        //  Fix — push the increment into the database
+@Modifying
+@Query("UPDATE Material m SET m.linkCount = m.linkCount + 1 WHERE m.id = :id")
+void incrementLinkCount(@Param("id") UUID id);
+
+@Modifying
+@Query("UPDATE Material m SET m.linkCount = GREATEST(m.linkCount - 1, 0) WHERE m.id = :id")
+void decrementLinkCount(@Param("id") UUID id);
 
         // Fetches all bookmarks for a specific user out of a given list of materials in
         // ONE query

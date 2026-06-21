@@ -68,6 +68,7 @@ CREATE TABLE gamification_profiles (
     longest_streak_days    SMALLINT         DEFAULT 0,
     last_activity_date     DATE,
     updated_at             DATETIME2,
+    version                BIGINT           NOT NULL DEFAULT 0,
     CONSTRAINT FK_Gamification_User FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 GO
@@ -79,12 +80,23 @@ CREATE TABLE xp_transactions (
     id             UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID() PRIMARY KEY,
     user_id        UNIQUEIDENTIFIER NOT NULL,
     event_type     VARCHAR(50)      NOT NULL,        -- POST_CREATED, ANSWER_UPVOTED, etc.
+    event_key      VARCHAR(200)     NOT NULL,
     xp_delta       INT              NOT NULL,        -- positive = earned, negative = deducted
     reference_id   UNIQUEIDENTIFIER,                 -- UUID of the triggering entity (nullable)
     reference_type VARCHAR(50),                      -- POST / ANSWER / MATERIAL / LOGIN
     created_at     DATETIME2        DEFAULT GETUTCDATE(),
     CONSTRAINT FK_XP_User FOREIGN KEY (user_id) REFERENCES users(id)
 );
+GO
+
+ALTER TABLE xp_transactions
+    ADD CONSTRAINT UQ_XP_EVENT_KEY UNIQUE (event_key);
+GO
+
+CREATE INDEX idx_xp_transactions_user_event ON xp_transactions(user_id, event_type);
+GO
+
+CREATE INDEX idx_xp_transactions_created_at ON xp_transactions(created_at);
 GO
 
 -- ─────────────────────────────────────────────────────
@@ -104,6 +116,15 @@ CREATE TABLE courses_registered (
 );
 GO
 
+-- Prevent duplicate registrations for the same period
+ALTER TABLE courses_registered
+    ADD CONSTRAINT uk_course_registration_period
+    UNIQUE (user_id, course_code, academic_year, semester);
+GO
+
+CREATE INDEX idx_courses_registered_user_current ON courses_registered(user_id, is_current);
+GO
+
 -- ─────────────────────────────────────────────────────
 -- SPACES
 -- ─────────────────────────────────────────────────────
@@ -120,6 +141,10 @@ CREATE TABLE spaces (
     created_at   DATETIME2        DEFAULT GETUTCDATE(),
     CONSTRAINT FK_Space_Creator FOREIGN KEY (created_by) REFERENCES users(id)
 );
+GO
+
+-- Speeds category listing + similarity-check candidate retrieval
+CREATE INDEX idx_spaces_category_active ON spaces(category, is_active);
 GO
 
 -- ─────────────────────────────────────────────────────
@@ -196,6 +221,17 @@ CREATE TABLE votes (
 );
 GO
 
+-- Prevent duplicate votes by the same user on the same target
+ALTER TABLE votes
+    ADD CONSTRAINT uk_vote_user_target UNIQUE (user_id, target_type, target_id);
+GO
+
+CREATE INDEX idx_vote_target ON votes(target_type, target_id);
+GO
+
+CREATE INDEX idx_vote_user ON votes(user_id);
+GO
+
 -- ─────────────────────────────────────────────────────
 -- MATERIALS
 -- ─────────────────────────────────────────────────────
@@ -215,6 +251,10 @@ CREATE TABLE materials (
 );
 GO
 
+-- Speeds material feed per space (newest-first)
+CREATE INDEX idx_materials_space_created ON materials(space_id, created_at);
+GO
+
 -- ─────────────────────────────────────────────────────
 -- MATERIAL LINKS  (users saving materials to their collection)
 -- ─────────────────────────────────────────────────────
@@ -226,6 +266,17 @@ CREATE TABLE material_links (
     CONSTRAINT FK_Link_Material FOREIGN KEY (material_id) REFERENCES materials(id),
     CONSTRAINT FK_Link_User     FOREIGN KEY (user_id)     REFERENCES users(id)
 );
+GO
+
+-- Prevent duplicate bookmarks by the same user
+ALTER TABLE material_links
+    ADD CONSTRAINT uk_material_link_material_user UNIQUE (material_id, user_id);
+GO
+
+CREATE INDEX idx_material_link_user ON material_links(user_id);
+GO
+
+CREATE INDEX idx_material_link_material ON material_links(material_id);
 GO
 
 -- ─────────────────────────────────────────────────────
@@ -246,3 +297,19 @@ CREATE TABLE notifications (
     CONSTRAINT FK_Notif_Sender    FOREIGN KEY (sender_id)    REFERENCES users(id)
 );
 GO
+CREATE TABLE online_courses (
+    id               NVARCHAR(500)   NOT NULL PRIMARY KEY,
+    course_code      NVARCHAR(30)    NOT NULL,
+    course_name      NVARCHAR(300)   NOT NULL,
+    source           NVARCHAR(50)    NOT NULL,
+    title            NVARCHAR(300)   NOT NULL,
+    url              NVARCHAR(1024)  NULL,
+    description      NVARCHAR(2000)  NULL,
+    rating           FLOAT           NULL,
+    reviews          INT             NULL,
+    price            FLOAT           NULL,
+    score            FLOAT           NULL,
+    last_updated     DATETIME2       NOT NULL DEFAULT GETDATE(),
+
+    INDEX idx_online_courses_code (course_code)
+);

@@ -9,6 +9,8 @@ import com.gp.GP_backend.shared.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -60,7 +62,7 @@ public class GamificationController {
     @GetMapping("/leaderboard")
     @Operation(summary = "Get the system-wide XP leaderboard")
     public ResponseEntity<ApiResponse<List<SystemLeaderboardEntry>>> getSystemLeaderboard(
-            @RequestParam(defaultValue = "20") int limit) {
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
 
         List<SystemLeaderboardEntry> leaderboard = gamificationService.getSystemLeaderboard(limit);
 
@@ -81,7 +83,7 @@ public class GamificationController {
     @Operation(summary = "Get the leaderboard for a specific space")
     public ResponseEntity<ApiResponse<List<SpaceLeaderboardEntry>>> getSpaceLeaderboard(
             @PathVariable UUID spaceId,
-            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit,
             @AuthenticationPrincipal User currentUser) {
 
         List<SpaceLeaderboardEntry> leaderboard = gamificationService.getSpaceLeaderboard(spaceId, currentUser.getId(),

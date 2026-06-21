@@ -6,6 +6,7 @@ import com.gp.GP_backend.domain.user.repository.PasswordResetTokenRepository;
 import com.gp.GP_backend.domain.user.repository.UserRepository;
 import com.gp.GP_backend.shared.exception.ApiException;
 import com.gp.GP_backend.shared.util.EmailService;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -56,17 +57,32 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class PasswordResetService {
 
-    /** Reset link lifetime — 15 minutes is the industry-standard window. */
-    private static final long RESET_TOKEN_EXPIRY_MS = 15 * 60 * 1000L;
+    private static final long MIN_RESET_EXPIRY_MS = 60_000L; // 1 minute
+    private static final long MAX_RESET_EXPIRY_MS = 86_400_000L; // 24 hours
 
-    @Value("${app.frontend-url:http://localhost:5173}")
+    @Value("${app.frontend-url:http://localhost:5173/reset-password}")
     private String frontendUrl;
+
+    @Value("${reset.token-expiration-ms}")
+    private long resetTokenExpiryMs;
 
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
     private final EmailService emailService;
+
+    @PostConstruct
+    void validateResetExpiration() {
+        if (resetTokenExpiryMs < MIN_RESET_EXPIRY_MS || resetTokenExpiryMs > MAX_RESET_EXPIRY_MS) {
+            throw new IllegalStateException(
+                    "reset.token-expiration-ms must be between "
+                            + MIN_RESET_EXPIRY_MS
+                            + " and "
+                            + MAX_RESET_EXPIRY_MS
+                            + " milliseconds");
+        }
+    }
 
     // ─── Forgot password ──────────────────────────────────────────────────────
 
@@ -99,7 +115,7 @@ public class PasswordResetService {
         PasswordResetToken resetToken = PasswordResetToken.builder()
                 .user(user)
                 .tokenHash(tokenHash)
-                .expiryDate(Instant.now().plusMillis(RESET_TOKEN_EXPIRY_MS))
+            .expiryDate(Instant.now().plusMillis(resetTokenExpiryMs))
                 .build();
 
         passwordResetTokenRepository.save(resetToken);
@@ -177,6 +193,9 @@ public class PasswordResetService {
         // Flush immediately — must precede revokeAllUserTokens (see class Javadoc)
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         userRepository.saveAndFlush(user);
+
+        // Invalidate any outstanding reset links after a successful password change.
+        passwordResetTokenRepository.invalidateAllForUser(user);
 
         // Revoke all refresh tokens so other devices are prompted to re-authenticate
         refreshTokenService.revokeAllUserTokens(user);

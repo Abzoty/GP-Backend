@@ -2,25 +2,17 @@ package com.gp.GP_backend;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 
 /**
  * Smoke test that verifies the Spring application context loads without errors.
  *
  * <p>
- * <b>Prerequisites:</b> This test requires a running SQL Server instance
- * (configured in {@code application-dev.properties}) because the full context
- * includes JPA/Hibernate, which connects to the database on startup.
- *
- * <p>
- * To run integration tests without a live database, either:
- * <ul>
- * <li>Add an H2 in-memory database as a test-scoped dependency and create
- * an {@code application-test.properties} with H2 settings, or</li>
- * <li>Use {@code @MockBean} / {@code @DataJpaTest} slices for unit tests
- * that don't need the full context.</li>
- * </ul>
+ * This test should run using the {@code test} Spring profile (H2 in-memory DB)
+ * so it stays deterministic and does not depend on external services.
  */
 @SpringBootTest
+@ActiveProfiles("test")
 class GpBackendApplicationTests {
 
     @Test

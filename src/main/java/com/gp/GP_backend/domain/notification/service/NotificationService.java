@@ -57,6 +57,16 @@ public class NotificationService {
     private final EmailService emailService;
     private final NotificationPreferencesRepository notificationPreferencesRepository;
 
+    // NotificationPreference lookups may return null when a user has no preference row yet.
+    // Treat missing preference as "disabled" to avoid NPEs in notification flows.
+    private boolean acceptsInApp(UUID userId) {
+        return Boolean.TRUE.equals(notificationPreferencesRepository.isUserAcceptInAppNotifications(userId));
+    }
+
+    private boolean acceptsEmail(UUID userId) {
+        return Boolean.TRUE.equals(notificationPreferencesRepository.isUserAcceptEmailNotifications(userId));
+    }
+
     public void notifyNewPostCreated(Post post, User author) {
         String spaceName = spaceRepository.findNameById(post.getSpaceId());
         List<UUID> memberIds = spaceMembershipRepository.findMembersIdsBySpaceId(post.getSpaceId());
@@ -122,7 +132,7 @@ public class NotificationService {
     public void notifyUpvoteAnswerReceived(UUID answerId, User voter) {
         Answer answer = answerRepository.findById(answerId).orElseThrow();
         User recipient = userRepository.findById(answer.getAuthorId()).orElseThrow();
-        if (!notificationPreferencesRepository.isUserAcceptInAppNotifications(recipient.getId())) return;
+        if (!acceptsInApp(recipient.getId())) return;
         String title = "Your answer got an upvote!";
         String body = voter.getFullName() + " upvoted your answer: \"" + answer.getBody().substring(0, Math.min(50, answer.getBody().length())) + "...\"";
 
@@ -145,7 +155,7 @@ public class NotificationService {
     public void notifyGoodQuestionMarked(UUID postId, User marker) {
         Post post = postRepository.findById(postId).orElseThrow();
         User recipient = userRepository.findById(post.getAuthorId()).orElseThrow();
-        if (!notificationPreferencesRepository.isUserAcceptInAppNotifications(recipient.getId())) return;
+        if (!acceptsInApp(recipient.getId())) return;
         String title = "Good Question!";
         String body = marker.getFullName() + " marked your question: \"" + post.getTitle() + "\" as a Good Question!";
 
@@ -170,7 +180,7 @@ public class NotificationService {
         String title = "New answer to your question!";
         String body = answerer.getFullName() + " answered your question: \"" + post.getTitle() + "\". Check it out!";
 
-        if (notificationPreferencesRepository.isUserAcceptInAppNotifications(recipient.getId())) {
+        if (acceptsInApp(recipient.getId())) {
             notificationRepository.save(
                 Notification.builder()
                     .recipient(recipient)
@@ -187,7 +197,7 @@ public class NotificationService {
         }
 
         // email notification
-        if (notificationPreferencesRepository.isUserAcceptEmailNotifications(recipient.getId()))
+        if (acceptsEmail(recipient.getId()))
         {
             emailService.sendEmail(
                 recipient.getEmail(),
@@ -204,7 +214,7 @@ public class NotificationService {
         String title = "Your answer was accepted!";
         String body = "Congratulations! Your answer: \"" + answer.getBody().substring(0, Math.min(50, answer.getBody().length())) + "...\" was accepted as the solution.";
 
-        if (notificationPreferencesRepository.isUserAcceptInAppNotifications(recipient.getId()))
+        if (acceptsInApp(recipient.getId()))
         {
             notificationRepository.save(
                 Notification.builder()
@@ -223,7 +233,7 @@ public class NotificationService {
 
 
         // email notification
-        if (notificationPreferencesRepository.isUserAcceptEmailNotifications(recipient.getId()))
+        if (acceptsEmail(recipient.getId()))
         {
             emailService.sendEmail(
                 recipient.getEmail(),

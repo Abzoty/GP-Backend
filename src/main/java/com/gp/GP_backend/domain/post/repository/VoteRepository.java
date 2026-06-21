@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.UUID;
+import java.util.Optional;
 
 public interface VoteRepository extends JpaRepository<Vote, UUID> {
 
@@ -18,6 +19,11 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
                         UUID targetId,
                         TargetType targetType,
                         UUID userId);
+
+        Optional<Vote> findByTargetIdAndTargetTypeAndUserId(
+                UUID targetId,
+                TargetType targetType,
+                UUID userId);
 
         @Modifying
         @Transactional

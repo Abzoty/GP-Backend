@@ -36,9 +36,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Business logic for Posts and Answers.
@@ -158,6 +163,12 @@ public class PostService {
                                         "Only the post author can delete it");
                 }
 
+                gamificationService.revokeXp(
+                                post.getAuthorId(),
+                                XpCalculator.EVENT_POST_CREATED,
+                                postId,
+                                XpCalculator.REF_POST);
+
                 // 1. Delete votes on all answers belonging to this post
                 voteRepository.deleteVotesByPostAnswers(postId);
 
@@ -255,13 +266,70 @@ public class PostService {
                         throw new ApiException(HttpStatus.BAD_REQUEST,
                                         "Answer does not belong to the specified post");
                 }
-                answerRepository.markAsAccepted(answerId);
-                postRepository.markAsSolved(postId, answerId);
+                UUID answerAuthorId = answer.getAuthorId();
+                // Prevent self-accept farming: you cannot accept your own answer.
+                if (answerAuthorId.equals(post.getAuthorId())) {
+                        throw new ApiException(HttpStatus.BAD_REQUEST,
+                                        "You cannot accept your own answer");
+                }
+
+                if (Boolean.TRUE.equals(post.getIsSolved())) {
+                        UUID currentAcceptedId = post.getAcceptedAnswerId();
+                        if (currentAcceptedId != null && currentAcceptedId.equals(answerId)) {
+                                return true;
+                        }
+
+                        if (currentAcceptedId != null) {
+                                Answer oldAccepted = answerRepository.findById(currentAcceptedId)
+                                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                                                "Accepted answer not found with id: " + currentAcceptedId));
+
+                                answerRepository.unmarkAsAccepted(currentAcceptedId);
+                                gamificationService.revokeXp(
+                                                oldAccepted.getAuthorId(),
+                                                XpCalculator.EVENT_ANSWER_ACCEPTED,
+                                                currentAcceptedId,
+                                                XpCalculator.REF_ANSWER);
+                        }
+
+                        if (!answer.getIsAccepted()) {
+                                answerRepository.markAsAccepted(answerId);
+                        }
+
+                        postRepository.setAcceptedAnswer(postId, answerId);
+
+                        gamificationService.awardXp(
+                                        answerAuthorId,
+                                        XpCalculator.EVENT_ANSWER_ACCEPTED,
+                                        XpCalculator.XP_ANSWER_ACCEPTED,
+                                        answerId,
+                                        XpCalculator.REF_ANSWER);
+
+                        return true;
+                }
+
+                //check the answer already accepted 
+                if (answer.getIsAccepted()) {
+                        throw new ApiException(HttpStatus.BAD_REQUEST,
+                                        "Answer is already accepted");
+                }
+
+                int acceptedRows = answerRepository.markAsAccepted(answerId);
+                if (acceptedRows == 0) {
+                        throw new ApiException(HttpStatus.BAD_REQUEST,
+                                        "Answer is already accepted");
+                }
+
+                int solvedRows = postRepository.markAsSolved(postId, answerId);
+                if (solvedRows == 0) {
+                        // Roll back the acceptance as well (same transaction) to avoid partial state.
+                        throw new ApiException(HttpStatus.BAD_REQUEST,
+                                        "Post is already solved");
+                }
 
                 notificationService.notifyAnswerAccepted(answerId);
 
                 // Award the answerer for having their answer accepted
-                UUID answerAuthorId = answer.getAuthorId();
                 gamificationService.awardXp(
                                 answerAuthorId,
                                 XpCalculator.EVENT_ANSWER_ACCEPTED,
@@ -269,6 +337,38 @@ public class PostService {
                                 answerId,
                                 XpCalculator.REF_ANSWER);
 
+                return true;
+        }
+
+        @Transactional
+        public boolean unmarkQuestionAsSolved(UUID postId, User user) {
+                Post post = postRepository.findById(postId)
+                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                                "Post not found with id: " + postId));
+                if (!post.getAuthorId().equals(user.getId())) {
+                        throw new ApiException(HttpStatus.FORBIDDEN,
+                                        "Only the question author can unmark it as solved");
+                }
+
+                if (!Boolean.TRUE.equals(post.getIsSolved())) {
+                        return true;
+                }
+
+                UUID acceptedAnswerId = post.getAcceptedAnswerId();
+                if (acceptedAnswerId != null) {
+                        Answer accepted = answerRepository.findById(acceptedAnswerId)
+                                        .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                                        "Accepted answer not found with id: " + acceptedAnswerId));
+
+                        answerRepository.unmarkAsAccepted(acceptedAnswerId);
+                        gamificationService.revokeXp(
+                                        accepted.getAuthorId(),
+                                        XpCalculator.EVENT_ANSWER_ACCEPTED,
+                                        acceptedAnswerId,
+                                        XpCalculator.REF_ANSWER);
+                }
+
+                postRepository.clearSolved(postId);
                 return true;
         }
 
@@ -316,9 +416,22 @@ public class PostService {
 
                 Page<Answer> answers = answerRepository.findByPostIdOrderByIsAcceptedDescUpvoteCountDescCreatedAtAsc(
                                 postId, PageRequest.of(page, size));
+
+                Set<UUID> answerAuthorIds = answers.getContent().stream()
+                                .map(Answer::getAuthorId)
+                                .collect(Collectors.toSet());
+                Map<UUID, User> answerAuthors = userRepository.findAllById(answerAuthorIds).stream()
+                                .collect(Collectors.toMap(User::getId, u -> u));
+
                 return answers.stream()
-                                .map(answer -> toAnswerResponse(answer,
-                                                answerRepository.findAuthorNameByAnswerId(answer.getId())))
+                                .map(answer -> {
+                                        User author = answerAuthors.get(answer.getAuthorId());
+                                        if (author == null) {
+                                                throw new ApiException(HttpStatus.NOT_FOUND,
+                                                                "User not found with id: " + answer.getAuthorId());
+                                        }
+                                        return toAnswerResponse(answer, author.getFullName());
+                                })
                                 .toList();
         }
 
@@ -345,6 +458,12 @@ public class PostService {
                         throw new ApiException(HttpStatus.FORBIDDEN,
                                         "Only the answer author can delete it");
                 }
+
+                gamificationService.revokeXp(
+                                answer.getAuthorId(),
+                                XpCalculator.EVENT_ANSWER_GIVEN,
+                                answerId,
+                                XpCalculator.REF_ANSWER);
 
                 // Delete all votes on this answer before removing it
                 voteRepository.deleteByTargetIdAndTargetType(answerId, TargetType.ANSWER);
@@ -517,5 +636,55 @@ public class PostService {
                                 : Sort.Direction.DESC;
                 String field = (sortBy != null && POST_SORT_FIELDS.contains(sortBy)) ? sortBy : "createdAt";
                 return Sort.by(direction, field);
+        }
+
+        private List<AllPostsResponse.AnswerSummary> buildTop3Answers(UUID postId) {
+                List<Answer> topAnswers = answerRepository
+                                .findByPostIdOrderByIsAcceptedDescUpvoteCountDescCreatedAtAsc(
+                                                postId, PageRequest.of(0, 3))
+                                .getContent();
+
+                if (topAnswers.isEmpty()) {
+                        return List.of();
+                }
+
+                Set<UUID> answerAuthorIds = topAnswers.stream()
+                                .map(Answer::getAuthorId)
+                                .collect(Collectors.toCollection(HashSet::new));
+                Map<UUID, User> answerAuthors = userRepository.findAllById(answerAuthorIds).stream()
+                                .collect(Collectors.toMap(User::getId, u -> u));
+
+                return topAnswers.stream()
+                                .map(answer -> {
+                                        User answerAuthor = answerAuthors.get(answer.getAuthorId());
+                                        if (answerAuthor == null) {
+                                                throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND",
+                                                                "Author not found for answer: " + answer.getId());
+                                        }
+
+                                        return AllPostsResponse.AnswerSummary.builder()
+                                                        .answerId(answer.getId())
+                                                        .authorId(answer.getAuthorId())
+                                                        .authorName(answerAuthor.getFullName())
+                                                        .authorAvatarUrl(answerAuthor.getImageUrl())
+                                                        .body(answer.getBody())
+                                                        .upvoteCount(answer.getUpvoteCount())
+                                                        .isAccepted(answer.getIsAccepted())
+                                                        .createdAt(answer.getCreatedAt().toInstant(ZoneOffset.UTC))
+                                                        .build();
+                                })
+                                .toList();
+        }
+
+        private Map<UUID, Integer> mapAnswerCountsByPostId(List<UUID> postIds) {
+                if (postIds.isEmpty()) {
+                        return Collections.emptyMap();
+                }
+
+                Map<UUID, Integer> answerCounts = new HashMap<>();
+                for (Object[] row : answerRepository.countByPostIds(postIds)) {
+                        answerCounts.put((UUID) row[0], ((Long) row[1]).intValue());
+                }
+                return answerCounts;
         }
 }
