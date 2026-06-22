@@ -11,7 +11,7 @@ import java.util.List;
 
 @Component
 @RequiredArgsConstructor
-public class PythonRecommendationClient {
+public class RecommendationClient {
 
     private static final ParameterizedTypeReference<List<SpaceRankingResponse>> RANKING_LIST_TYPE =
             new ParameterizedTypeReference<>() {

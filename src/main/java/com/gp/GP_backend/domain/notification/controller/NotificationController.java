@@ -27,15 +27,12 @@ import org.springframework.web.bind.annotation.PathVariable;
 
 /**
  * REST controller for Notification endpoints.
- *
- * TODO: Implement CRUD endpoints once NotificationService is complete.
  * All endpoints here are protected by JWT (configured in SecurityConfig).
  */
 @RestController
 @RequestMapping("/api/v1/notifications")
 @RequiredArgsConstructor
 public class NotificationController {
-    // TODO: inject NotificationService
     private final NotificationService notificationService;
 
     @GetMapping("/all-notifications")
