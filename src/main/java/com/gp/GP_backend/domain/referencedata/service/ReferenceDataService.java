@@ -2,6 +2,7 @@ package com.gp.GP_backend.domain.referencedata.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ResourceLoader;
@@ -14,10 +15,12 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Manages reference data: course catalog and grade mappings.
+ * Manages reference data: course catalog, grade mappings
  *
- * Loads JSON from classpath at startup, validates uniqueness,
- * and provides lookup/resolution methods for services.
+ * Loads JSON from classpath at startup, validates uniqueness, and provides:
+ * - lookup/resolution methods used internally by other services
+ * - raw, file-shaped accessors that expose each JSON file's full content
+ * for the reference-data API endpoints
  *
  * @since 1.0
  */
@@ -28,6 +31,11 @@ public class ReferenceDataService {
     private final ObjectMapper objectMapper;
     private final ResourceLoader resourceLoader;
 
+    // Full, file-shaped representations - returned as-is by the controller.
+    private CourseCatalogWrapper courseCatalog;
+    private GradeMappingWrapper gradeMapping;
+
+    // Derived lookup structures used internally for resolution logic.
     private Map<String, CourseData> coursesByCode;
     private List<GradeRangeData> gradeRanges;
 
@@ -41,8 +49,8 @@ public class ReferenceDataService {
         try {
             loadCourseCatalog();
             loadGradeMapping();
-            log.info("Reference data loaded successfully. Catalog version: 1.0, Courses: {}",
-                    coursesByCode.size());
+            log.info("Reference data loaded successfully. Catalog version: {}, Courses: {}",
+                    courseCatalog.getVersion(), coursesByCode.size());
         } catch (IOException e) {
             log.error("Failed to load reference data", e);
             throw new RuntimeException("Reference data initialization failed", e);
@@ -52,9 +60,9 @@ public class ReferenceDataService {
     private void loadCourseCatalog() throws IOException {
         String path = "classpath:reference-data/course-catalog.json";
         try (InputStream is = resourceLoader.getResource(path).getInputStream()) {
-            CourseCatalogWrapper wrapper = objectMapper.readValue(is, CourseCatalogWrapper.class);
+            courseCatalog = objectMapper.readValue(is, CourseCatalogWrapper.class);
 
-            coursesByCode = wrapper.getCourses().stream()
+            coursesByCode = courseCatalog.getCourses().stream()
                     .collect(Collectors.toMap(
                             CourseData::getCode,
                             c -> c,
@@ -70,17 +78,17 @@ public class ReferenceDataService {
     private void loadGradeMapping() throws IOException {
         String path = "classpath:reference-data/grade-mapping.json";
         try (InputStream is = resourceLoader.getResource(path).getInputStream()) {
-            GradeMappingWrapper wrapper = objectMapper.readValue(is, GradeMappingWrapper.class);
+            gradeMapping = objectMapper.readValue(is, GradeMappingWrapper.class);
 
-            // FIX: The JSON array is called "scale", not "gradeScale.grades"
-            gradeRanges = wrapper.getScale();
-
-            // Sort by minScore descending so we can iterate top-to-bottom
+            // Keep a separate sorted copy for internal resolution so the
+            // original file order is preserved on the wrapper returned to the API.
+            gradeRanges = new ArrayList<>(gradeMapping.getScale());
             gradeRanges.sort(Comparator.comparing(GradeRangeData::getMinScore).reversed());
 
             log.info("Grade mapping loaded: {} grade ranges", gradeRanges.size());
         }
     }
+
 
     public Optional<CourseData> findCourse(String code) {
         return Optional.ofNullable(coursesByCode.get(code));
@@ -117,6 +125,23 @@ public class ReferenceDataService {
     public Collection<CourseData> getAllCourses() {
         return coursesByCode.values();
     }
+
+    /**
+     * Returns the full course catalog (version, updated date, and courses),
+     * exactly as parsed from course-catalog.json.
+     */
+    public CourseCatalogWrapper getCourseCatalog() {
+        return courseCatalog;
+    }
+
+    /**
+     * Returns the full grade mapping (version, updatedAt, and scale),
+     * exactly as parsed from grade-mapping.json.
+     */
+    public GradeMappingWrapper getGradeMapping() {
+        return gradeMapping;
+    }
+
 
     // ==================== Inner DTOs for JSON deserialization ====================
 
@@ -155,7 +180,7 @@ public class ReferenceDataService {
     public static class GradeMappingWrapper {
         private String version;
         private String updatedAt;
-        private List<GradeRangeData> scale; // FIX: Maps directly to the "scale" array in JSON
+        private List<GradeRangeData> scale;
 
         public String getVersion() {
             return version;
@@ -186,8 +211,6 @@ public class ReferenceDataService {
     public static class CourseData {
         private String code;
         private String name;
-        private Integer credits;
-        private String prerequisite;
 
         public String getCode() {
             return code;
@@ -205,32 +228,15 @@ public class ReferenceDataService {
             this.name = name;
         }
 
-        public Integer getCredits() {
-            return credits;
-        }
-
-        public void setCredits(Integer credits) {
-            this.credits = credits;
-        }
-
-        public String getPrerequisite() {
-            return prerequisite;
-        }
-
-        public void setPrerequisite(String prerequisite) {
-            this.prerequisite = prerequisite;
-        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class GradeRangeData {
         private String grade;
 
-        // FIX: Tell Jackson that "min" in the JSON maps to "minScore" in Java
         @JsonProperty("min")
         private Double minScore;
 
-        // FIX: Tell Jackson that "max" in the JSON maps to "maxScore" in Java
         @JsonProperty("max")
         private Double maxScore;
 

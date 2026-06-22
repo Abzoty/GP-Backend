@@ -9,15 +9,11 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
  * Manages questionnaire data.
- *
- * Loads questionnaire JSON from classpath and provides methods
- * to retrieve questions (without scores/explanation).
- *
- * @since 1.0
  */
 @Service
 @Slf4j
@@ -27,6 +23,7 @@ public class QuestionnaireService {
     private final ResourceLoader resourceLoader;
 
     private QuestionnaireData questionnaire;
+    private String rawQuestionnaireJson; // Changed from JsonNode to String
 
     public QuestionnaireService(ObjectMapper objectMapper, ResourceLoader resourceLoader) {
         this.objectMapper = objectMapper;
@@ -34,14 +31,16 @@ public class QuestionnaireService {
         loadQuestionnaire();
     }
 
-    /**
-     * Loads questionnaire.json from classpath.
-     */
     private void loadQuestionnaire() {
         try {
             String path = "classpath:reference-data/questionnaire.json";
             try (InputStream is = resourceLoader.getResource(path).getInputStream()) {
-                questionnaire = objectMapper.readValue(is, QuestionnaireData.class);
+                // 1. Read the file exactly as a raw String to serve "as is"
+                rawQuestionnaireJson = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+
+                // 2. Map to Java objects for internal scoring logic
+                questionnaire = objectMapper.readValue(rawQuestionnaireJson, QuestionnaireData.class);
+
                 log.info("Questionnaire loaded: version={}, questions={}",
                         questionnaire.metadata.version, questionnaire.metadata.totalQuestions);
             }
@@ -52,42 +51,14 @@ public class QuestionnaireService {
     }
 
     /**
-     * Returns questionnaire metadata and questions without scores.
-     *
-     * @return questionnaire with questions (scores removed)
+     * Returns the raw JSON content of the questionnaire as a String.
      */
-    public QuestionnaireDisplayData getQuestionnaire() {
-        // Strip scores from questions for display
-        List<QuestionDisplayData> displayQuestions = new ArrayList<>();
-        for (QuestionData question : questionnaire.questions) {
-            QuestionDisplayData displayQuestion = new QuestionDisplayData();
-            displayQuestion.id = question.id;
-            displayQuestion.category = question.category;
-            displayQuestion.text = question.text;
-
-            // Only include answer text, not department scores
-            displayQuestion.answers = new ArrayList<>();
-            for (AnswerData answer : question.answers) {
-                AnswerDisplayData displayAnswer = new AnswerDisplayData();
-                displayAnswer.id = answer.id;
-                displayAnswer.text = answer.text;
-                displayQuestion.answers.add(displayAnswer);
-            }
-            displayQuestions.add(displayQuestion);
-        }
-
-        QuestionnaireDisplayData display = new QuestionnaireDisplayData();
-        display.version = questionnaire.metadata.version;
-        display.title = questionnaire.metadata.title;
-        display.instructions = questionnaire.metadata.instructions;
-        display.totalQuestions = questionnaire.metadata.totalQuestions;
-        display.questions = displayQuestions;
-        return display;
+    public String getRawQuestionnaire() {
+        return rawQuestionnaireJson;
     }
 
     /**
-     * Returns the full questionnaire data (including scores).
-     * For internal use only.
+     * Returns the mapped questionnaire data (for internal scoring use).
      */
     public QuestionnaireData getFullQuestionnaire() {
         return questionnaire;
@@ -106,9 +77,13 @@ public class QuestionnaireService {
         public String version;
         public String title;
         public String instructions;
+        public List<String> departments; // Captures the 5 departments from JSON
 
         @JsonProperty("total_questions")
         public Integer totalQuestions;
+
+        @JsonProperty("time_estimate")
+        public String timeEstimate;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -120,34 +95,21 @@ public class QuestionnaireService {
 
         public String text;
         public List<AnswerData> answers;
+
+        public String explanation;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class AnswerData {
-        public String id;
+        // Using Object to safely handle both String ("a") and Integer (1) IDs from JSON
+        public Object id;
         public String text;
 
         @JsonProperty("scores")
         public Map<String, Integer> departmentScores;
-    }
 
-    public static class QuestionnaireDisplayData {
-        public String version;
-        public String title;
-        public String instructions;
-        public Integer totalQuestions;
-        public List<QuestionDisplayData> questions;
-    }
-
-    public static class QuestionDisplayData {
-        public Integer id;
-        public String category;
-        public String text;
-        public List<AnswerDisplayData> answers;
-    }
-
-    public static class AnswerDisplayData {
-        public String id;
-        public String text;
+        public String getIdAsString() {
+            return id != null ? id.toString() : null;
+        }
     }
 }

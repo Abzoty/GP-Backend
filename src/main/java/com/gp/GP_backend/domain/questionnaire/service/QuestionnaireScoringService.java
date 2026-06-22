@@ -9,20 +9,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
  * Scores and validates questionnaire responses.
- *
- * Responsibilities:
- * - Validate all 20 questions are answered
- * - Validate answer IDs are valid for their questions
- * - Calculate raw department scores
- * - Normalize scores (sum = 1.0 per department, handle zero case)
- * - Return both raw and normalized scores
- *
- * @since 1.0
  */
 @Service
 @RequiredArgsConstructor
@@ -31,26 +23,10 @@ public class QuestionnaireScoringService {
 
     private final QuestionnaireService questionnaireService;
 
-    /**
-     * Scores a set of questionnaire answers.
-     *
-     * Validates:
-     * - All 20 questions are answered
-     * - Each answer ID is valid for its question
-     *
-     * Calculates:
-     * - Raw department scores (sum of answer scores per department)
-     * - Normalized scores (each department / total, handling zero case)
-     *
-     * @param request the answers request
-     * @return scoring response with raw and normalized scores
-     * @throws ApiException 400 INCOMPLETE_QUESTIONNAIRE if questions missing
-     * @throws ApiException 400 INVALID_ANSWER if answer ID is invalid
-     */
     public QuestionnaireScoreResponse scoreAnswers(QuestionnaireAnswersRequest request) {
         QuestionnaireService.QuestionnaireData questionnaire = questionnaireService.getFullQuestionnaire();
 
-        // Validate all questions are answered
+        // 1. Validate all questions are answered
         Set<Integer> providedQuestionIds = request.answers.keySet();
         Set<Integer> requiredQuestionIds = questionnaire.questions.stream()
                 .map(q -> q.id)
@@ -71,24 +47,60 @@ public class QuestionnaireScoringService {
                     "INCOMPLETE_QUESTIONNAIRE");
         }
 
-        // Validate answer IDs and collect scores
-        Map<String, Integer> rawScores = new HashMap<>();
-        rawScores.put("AI", 0);
-        rawScores.put("Systems", 0);
-        rawScores.put("Web", 0);
-        rawScores.put("Security", 0);
+        // 2. Initialize raw scores dynamically for all 5 departments defined in
+        // metadata
+        Map<String, Integer> rawScores = new LinkedHashMap<>();
+        if (questionnaire.metadata.departments != null) {
+            for (String dept : questionnaire.metadata.departments) {
+                rawScores.put(dept, 0);
+            }
+        } else {
+            // Fallback if metadata is missing departments
+            rawScores.put("AI", 0);
+            rawScores.put("CS", 0);
+            rawScores.put("IT", 0);
+            rawScores.put("IS", 0);
+            rawScores.put("DS", 0);
+        }
 
+        // 3. Calculate scores
         for (QuestionnaireService.QuestionData question : questionnaire.questions) {
             String providedAnswerId = request.answers.get(question.id);
-            if (providedAnswerId == null) {
-                continue; // Already validated above
-            }
+            if (providedAnswerId == null)
+                continue;
 
-            // Find the answer in this question
+            // Try direct match first (e.g., matching "a" to "a", or "3" to 3)
             QuestionnaireService.AnswerData answer = question.answers.stream()
-                    .filter(a -> a.id.equals(providedAnswerId))
+                    .filter(a -> a.getIdAsString() != null && a.getIdAsString().equals(providedAnswerId))
                     .findFirst()
                     .orElse(null);
+
+            // Fallback: Map letter choices ("a", "b", "c"...) to array indices
+            // This handles cases like sending {2: "c"} for a Likert question with IDs
+            // 1,2,3,4,5
+            if (answer == null) {
+                int index = -1;
+                switch (providedAnswerId.toLowerCase()) {
+                    case "a":
+                        index = 0;
+                        break;
+                    case "b":
+                        index = 1;
+                        break;
+                    case "c":
+                        index = 2;
+                        break;
+                    case "d":
+                        index = 3;
+                        break;
+                    case "e":
+                        index = 4;
+                        break;
+                }
+                if (index >= 0 && index < question.answers.size()) {
+                    answer = question.answers.get(index);
+                }
+            }
 
             if (answer == null) {
                 log.warn("Invalid answer ID: {} for question {}", providedAnswerId, question.id);
@@ -98,49 +110,45 @@ public class QuestionnaireScoringService {
                         "INVALID_ANSWER");
             }
 
-            // Accumulate scores
+            // Accumulate scores for each department
             for (Map.Entry<String, Integer> entry : answer.departmentScores.entrySet()) {
-                rawScores.put(entry.getKey(), rawScores.get(entry.getKey()) + entry.getValue());
+                if (rawScores.containsKey(entry.getKey())) {
+                    rawScores.put(entry.getKey(), rawScores.get(entry.getKey()) + entry.getValue());
+                }
             }
         }
 
-        // Normalize scores
+        // 4. Normalize scores to final probabilities
         Map<String, BigDecimal> normalizedScores = normalizeScores(rawScores);
 
         QuestionnaireScoreResponse response = new QuestionnaireScoreResponse();
         response.setRaw(rawScores);
         response.setNormalized(normalizedScores);
 
-        log.info("Questionnaire scored: raw={}, normalized={}", rawScores, normalizedScores);
+        log.info("Questionnaire scored: raw={}, probabilities={}", rawScores, normalizedScores);
 
         return response;
     }
 
     /**
-     * Normalizes department scores so they sum to 1.0.
-     *
-     * Handles edge case: if all scores are 0, returns equal weights (0.25 each for
-     * 4 departments).
-     *
-     * @param rawScores map of department -> raw score
-     * @return map of department -> normalized score (BigDecimal)
+     * Normalizes department scores so they sum to 1.0 (probabilities).
      */
     private Map<String, BigDecimal> normalizeScores(Map<String, Integer> rawScores) {
         int total = rawScores.values().stream().mapToInt(Integer::intValue).sum();
-
-        Map<String, BigDecimal> normalized = new HashMap<>();
+        Map<String, BigDecimal> normalized = new LinkedHashMap<>();
+        int deptCount = rawScores.size();
 
         if (total == 0) {
-            // All scores are 0: equal weights
-            BigDecimal equalWeight = BigDecimal.ONE.divide(BigDecimal.valueOf(4), 4, java.math.RoundingMode.HALF_UP);
+            // Edge case: All scores are 0, distribute equally
+            BigDecimal equalWeight = BigDecimal.ONE.divide(BigDecimal.valueOf(deptCount), 4, RoundingMode.HALF_UP);
             for (String dept : rawScores.keySet()) {
                 normalized.put(dept, equalWeight);
             }
         } else {
-            // Normal case: divide each by total
+            // Standard case: divide each department's score by the total sum
             for (Map.Entry<String, Integer> entry : rawScores.entrySet()) {
                 BigDecimal score = BigDecimal.valueOf(entry.getValue())
-                        .divide(BigDecimal.valueOf(total), 4, java.math.RoundingMode.HALF_UP);
+                        .divide(BigDecimal.valueOf(total), 4, RoundingMode.HALF_UP);
                 normalized.put(entry.getKey(), score);
             }
         }

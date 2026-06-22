@@ -1,7 +1,6 @@
 package com.gp.GP_backend.domain.questionnaire.controller;
 
 import com.gp.GP_backend.domain.questionnaire.dto.QuestionnaireAnswersRequest;
-import com.gp.GP_backend.domain.questionnaire.dto.QuestionnaireDisplayResponse;
 import com.gp.GP_backend.domain.questionnaire.dto.QuestionnaireScoreResponse;
 import com.gp.GP_backend.domain.questionnaire.service.QuestionnaireService;
 import com.gp.GP_backend.domain.questionnaire.service.QuestionnaireScoringService;
@@ -9,22 +8,12 @@ import com.gp.GP_backend.shared.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.modelmapper.ModelMapper;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /**
  * REST controller for questionnaire endpoints.
- *
- * All endpoints are public (no JWT required).
- *
- * Paths:
- * - GET /api/v1/questionnaire : retrieve questionnaire (questions without
- * scores)
- * - POST /api/v1/questionnaire/score : submit answers and receive department
- * scores
- *
- * @since 1.0
  */
 @RestController
 @RequestMapping("/api/v1/questionnaire")
@@ -34,36 +23,24 @@ public class QuestionnaireController {
 
     private final QuestionnaireService questionnaireService;
     private final QuestionnaireScoringService qScoringService;
-    private final ModelMapper modelMapper;
 
     /**
-     * Retrieve the questionnaire.
+     * Retrieve the raw questionnaire JSON file as is.
      *
-     * Returns all 20 questions with their answer options (without department
-     * scores).
-     *
-     * @return 200 OK with questionnaire metadata and questions
+     * @return 200 OK with the exact contents of questionnaire.json
      */
-    @GetMapping
-    public ResponseEntity<ApiResponse<QuestionnaireDisplayResponse>> getQuestionnaire() {
-        QuestionnaireService.QuestionnaireDisplayData displayData = questionnaireService.getQuestionnaire();
-        QuestionnaireDisplayResponse response = modelMapper.map(displayData, QuestionnaireDisplayResponse.class);
-        return ResponseEntity.ok(ApiResponse.ok("Questionnaire retrieved", response));
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> getQuestionnaire() {
+        // Returns the raw String directly, bypassing Jackson serialization
+        return ResponseEntity.ok(questionnaireService.getRawQuestionnaire());
     }
 
     /**
      * Score questionnaire answers.
      *
-     * Validates:
-     * - All 20 questions are answered
-     * - Each answer ID is valid
-     *
-     * Returns:
-     * - Raw department scores (sum of individual answer scores)
-     * - Normalized scores (each department / total)
-     *
-     * @param request answers map (question ID -> answer ID)
-     * @return 200 OK with raw and normalized scores
+     * @param request answers map (question ID -> answer choice e.g., {1: "a", 2:
+     *                "c"})
+     * @return 200 OK with raw and normalized scores (probabilities)
      */
     @PostMapping("/score")
     public ResponseEntity<ApiResponse<QuestionnaireScoreResponse>> scoreQuestionnaire(
