@@ -15,22 +15,20 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/recommendations")
+@RequestMapping("/api/v1/online-courses") // Changed to avoid collision with RecommendationController
 @RequiredArgsConstructor
-@Tag(name = "Online Courses")
+@Tag(name = "Online Courses", description = "Online course recommendations based on registered courses")
 @SecurityRequirement(name = "bearerAuth")
 public class OnlineCourseController {
 
     private final OnlineCourseService onlineCourseService;
 
-    @GetMapping("/courses")
+    @GetMapping // Changed from @GetMapping("/courses") to avoid redundant /online-courses/courses URL
     @Operation(summary = "Get online courses for the student's registered courses")
     public ResponseEntity<ApiResponse<List<OnlineCourseResponse>>> getCourses(
             @AuthenticationPrincipal User user) {
-
-        List<OnlineCourseResponse> courses = onlineCourseService
-            .getCoursesForStudent(user.getId());
-
+        
+        List<OnlineCourseResponse> courses = onlineCourseService.getCoursesForStudent(user.getId());
         return ResponseEntity.ok(ApiResponse.ok("Courses retrieved successfully", courses));
     }
 }
