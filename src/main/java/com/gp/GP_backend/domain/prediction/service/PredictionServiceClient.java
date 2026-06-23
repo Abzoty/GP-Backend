@@ -1,25 +1,35 @@
 package com.gp.GP_backend.domain.prediction.service;
 
+import com.gp.GP_backend.domain.prediction.dto.PythonServiceRequest;
+import com.gp.GP_backend.domain.prediction.dto.PythonServiceResponse;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
-
-import java.math.BigDecimal;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 /**
- * Client for the FastAPI prediction service.
+ * HTTP client for the Python FastAPI prediction service.
  *
- * Wraps calls to the FastAPI `/predict` endpoint with a Resilience4j circuit
- * breaker.
+ * Calls {@code POST /predict} on the Python service, passing course data and
+ * receiving department probabilities.
  *
- * Currently provides a stub implementation that returns fixed probabilities.
- * When FastAPI is ready, replace the stub with actual RestClient calls.
+ * Resilience:
+ * - Resilience4j circuit breaker ("prediction-service") wraps every call.
+ * - Configurable connect + read timeouts prevent thread starvation.
+ * - Fallback returns {@code null}, which the orchestration service treats as
+ * "model unavailable" and falls back to questionnaire-only scoring.
  *
- * Circuit breaker name: "prediction-service"
- * Fallback: returns stub probabilities and modelAvailable=false with warning.
+ * Configuration (application.properties / application.yml):
+ * 
+ * <pre>
+ * prediction.service.url=http://localhost:5002
+ * prediction.service.connect-timeout-ms=5000
+ * prediction.service.read-timeout-ms=30000
+ * </pre>
  *
  * @since 1.0
  */
@@ -27,49 +37,68 @@ import java.util.Map;
 @Slf4j
 public class PredictionServiceClient {
 
+    private final RestClient restClient;
+
+    public PredictionServiceClient(
+            @Value("${prediction.service.url:http://localhost:5002}") String serviceUrl,
+            @Value("${prediction.service.connect-timeout-ms:5000}") int connectTimeoutMs,
+            @Value("${prediction.service.read-timeout-ms:30000}") int readTimeoutMs) {
+
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(connectTimeoutMs);
+        factory.setReadTimeout(readTimeoutMs);
+
+        this.restClient = RestClient.builder()
+                .baseUrl(serviceUrl)
+                .requestFactory(factory)
+                .build();
+
+        log.info("PredictionServiceClient ready — url={}, connectTimeout={}ms, readTimeout={}ms",
+                serviceUrl, connectTimeoutMs, readTimeoutMs);
+    }
+
     /**
-     * Calls the FastAPI prediction service to get department probabilities.
+     * Sends course data to the Python service and retrieves department
+     * probabilities.
      *
-     * Stub implementation: Returns fixed probabilities.
-     * To-do: Replace with actual RestClient call when FastAPI is available.
+     * The Python service is responsible for all feature engineering (one-hot
+     * encoding, GPA averages, etc.) and model inference.
      *
-     * @param courseCodesForPrediction list of course codes
-     * @return map of department -> probability (BigDecimal between 0 and 1)
+     * @param request course data for the current user
+     * @return model response containing department probabilities, or {@code null}
+     *         if the service is unreachable or the circuit breaker is open
      */
     @CircuitBreaker(name = "prediction-service", fallbackMethod = "predictFallback")
-    public Map<String, BigDecimal> predict(List<String> courseCodesForPrediction) {
-        // STUB: Return fixed probabilities
-        // TODO: Replace with actual RestClient call to FastAPI /predict endpoint
-        log.info("Prediction request (stub): courses={}", courseCodesForPrediction);
+    public PythonServiceResponse predict(PythonServiceRequest request) {
+        log.info("Calling Python prediction service — {} course(s) in payload",
+                request.getCourses().size());
 
-        return getStubProbabilities();
+        PythonServiceResponse response = restClient.post()
+                .uri("/predict")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .body(PythonServiceResponse.class);
+
+        log.info("Python service responded — probabilities={}",
+                response != null ? response.getProbabilities() : "null");
+
+        return response;
     }
 
     /**
-     * Fallback method when the prediction service is unavailable.
+     * Circuit-breaker fallback.
      *
-     * Returns fixed stub probabilities and indicates model is unavailable.
+     * Returns {@code null} so the orchestration service can degrade gracefully
+     * to questionnaire-only scores instead of surfacing a 500 to the client.
      *
-     * @param courseCodesForPrediction the course list (unused in fallback)
-     * @param ex                       the exception that triggered the fallback
-     * @return map of department -> probability (stub values)
+     * @param request the original request (unused in fallback)
+     * @param ex      the exception that triggered the fallback
+     * @return null — signals "model unavailable" to the orchestration service
      */
-    public Map<String, BigDecimal> predictFallback(List<String> courseCodesForPrediction, Throwable ex) {
-        log.warn("Prediction service fallback triggered", ex);
-        return getStubProbabilities();
-    }
-
-    /**
-     * Returns fixed stub probabilities for testing.
-     *
-     * @return map of departments -> fixed probabilities
-     */
-    private Map<String, BigDecimal> getStubProbabilities() {
-        Map<String, BigDecimal> probs = new HashMap<>();
-        probs.put("AI", new BigDecimal("0.25"));
-        probs.put("Systems", new BigDecimal("0.25"));
-        probs.put("Web", new BigDecimal("0.25"));
-        probs.put("Security", new BigDecimal("0.25"));
-        return probs;
+    public PythonServiceResponse predictFallback(PythonServiceRequest request, Throwable ex) {
+        log.warn("Prediction service fallback triggered — cause: {}: {}",
+                ex.getClass().getSimpleName(), ex.getMessage());
+        return null;
     }
 }

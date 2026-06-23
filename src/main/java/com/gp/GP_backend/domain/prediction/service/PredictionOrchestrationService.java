@@ -1,27 +1,39 @@
 package com.gp.GP_backend.domain.prediction.service;
 
+import com.gp.GP_backend.domain.course.entity.CourseRegistration;
+import com.gp.GP_backend.domain.course.repository.CourseRegistrationRepository;
+import com.gp.GP_backend.domain.prediction.dto.CourseDataDto;
 import com.gp.GP_backend.domain.prediction.dto.PredictionRequest;
 import com.gp.GP_backend.domain.prediction.dto.PredictionResponse;
-import com.gp.GP_backend.domain.questionnaire.dto.QuestionnaireAnswersRequest;
-import com.gp.GP_backend.domain.questionnaire.dto.QuestionnaireScoreResponse;
-import com.gp.GP_backend.domain.questionnaire.service.QuestionnaireScoringService;
+import com.gp.GP_backend.domain.prediction.dto.PythonServiceRequest;
+import com.gp.GP_backend.domain.prediction.dto.PythonServiceResponse;
+import com.gp.GP_backend.domain.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.util.HashMap;
-import java.util.Map;   
+import java.math.RoundingMode;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
- * Orchestrates the department prediction workflow.
+ * Orchestrates the full department-prediction pipeline.
  *
- * Steps:
- * 1. Score the questionnaire answers
- * 2. Call the prediction service with course codes
- * 3. Combine questionnaire scores and model probabilities
- * 4. Determine top department
- * 5. Return comprehensive prediction response
+ * Pipeline steps:
+ * 1. Accept the pre-computed normalized questionnaire scores from the request.
+ * 2. Load all of the authenticated user's course registrations from the DB.
+ * 3. POST the course data to the Python ML service.
+ * 4. Combine questionnaire scores + model probabilities (50 / 50 by default).
+ * 5. Return a chart-ready PredictionResponse sorted by combined score.
+ *
+ * Graceful degradation: if the Python service is unreachable the response still
+ * returns 200 with modelAvailable=false and combinedScore ==
+ * questionnaireScore.
  *
  * @since 1.0
  */
@@ -30,110 +42,146 @@ import java.util.Map;
 @Slf4j
 public class PredictionOrchestrationService {
 
-    private final QuestionnaireScoringService questionnaireScoringService;
-    private final PredictionServiceClient predictionServiceClient;
+        private static final BigDecimal QUESTIONNAIRE_WEIGHT = new BigDecimal("0.5");
+        private static final BigDecimal MODEL_WEIGHT = new BigDecimal("0.5");
+        private static final int SCORE_SCALE = 4;
 
-    /**
-     * Orchestrates prediction for a user.
-     *
-     * @param request prediction request (questionnaire answers + courses)
-     * @return prediction response with department probabilities
-     */
-    public PredictionResponse predict(PredictionRequest request) {
-        log.info("Starting prediction orchestration: courses={}",
-                request.getCourseCodesForPrediction());
+        private final PredictionServiceClient predictionServiceClient;
+        private final CourseRegistrationRepository courseRegistrationRepository;
 
-        // Step 1: Score the questionnaire
-        QuestionnaireAnswersRequest answersRequest = new QuestionnaireAnswersRequest();
-        answersRequest.answers = request.getQuestionnaireAnswers();
-        QuestionnaireScoreResponse scoreResponse = questionnaireScoringService.scoreAnswers(answersRequest);
+        // ──────────────────────────────────────────────────────────────────────────
 
-        // Step 2: Get model predictions
-        Map<String, BigDecimal> modelPredictions = predictionServiceClient.predict(
-                request.getCourseCodesForPrediction());
-        boolean modelAvailable = modelPredictions != null && !modelPredictions.isEmpty();
+        /**
+         * Run the prediction pipeline.
+         *
+         * @param user    authenticated user — courses are loaded automatically
+         * @param request contains the normalized scores from the /score endpoint
+         * @return structured response with per-department breakdowns
+         */
+        public PredictionResponse predict(User user, PredictionRequest request) {
+                log.info("Starting prediction pipeline for user={}", user.getId());
 
-        // Step 3: Combine scores
-        Map<String, BigDecimal> combined = combineScores(
-                scoreResponse.getNormalized(),
-                modelPredictions,
-                modelAvailable);
+                // ── Step 1: Use the normalized scores the client already computed ─────
+                Map<String, BigDecimal> questionnaireScores = request.getNormalizedScores();
+                log.debug("Questionnaire normalized scores received: {}", questionnaireScores);
 
-        // Step 4: Find top department
-        String topDepartment = findTopDepartment(combined);
+                // ── Step 2: Fetch all course registrations for this user ──────────────
+                List<CourseRegistration> courses = courseRegistrationRepository.findByUser(user);
+                log.info("Loaded {} course registration(s) for user={}", courses.size(), user.getId());
 
-        // Build response
-        PredictionResponse response = PredictionResponse.builder()
-                .departments(modelPredictions)
-                .questionnaire(scoreResponse.getNormalized())
-                .combined(combined)
-                .topDepartment(topDepartment)
-                .modelAvailable(modelAvailable)
-                .modelVersion("v1.0")
-                .model(PredictionResponse.ModelInfo.builder()
-                        .name("Department Prediction Model")
-                        .version("1.0")
-                        .build())
-                .build();
+                // ── Step 3: Call the Python ML service ────────────────────────────────
+                List<CourseDataDto> courseData = courses.stream()
+                                .map(this::toCourseDataDto)
+                                .collect(Collectors.toList());
 
-        if (!modelAvailable) {
-            response.setWarning("Prediction model is currently unavailable. " +
-                    "Showing questionnaire-based recommendation only.");
+                PythonServiceResponse pythonResponse = predictionServiceClient.predict(
+                                PythonServiceRequest.builder().courses(courseData).build());
+
+                boolean modelAvailable = pythonResponse != null
+                                && pythonResponse.getProbabilities() != null
+                                && !pythonResponse.getProbabilities().isEmpty();
+
+                Map<String, BigDecimal> modelScores = modelAvailable ? pythonResponse.getProbabilities() : null;
+                String modelVersion = modelAvailable ? pythonResponse.getModelVersion() : null;
+
+                log.info("Python service — available={}, probabilities={}", modelAvailable, modelScores);
+
+                // ── Step 4: Determine effective weights ───────────────────────────────
+                BigDecimal qWeight = modelAvailable ? QUESTIONNAIRE_WEIGHT : BigDecimal.ONE;
+                BigDecimal mWeight = modelAvailable ? MODEL_WEIGHT : BigDecimal.ZERO;
+
+                // ── Step 5: Build per-department score list ───────────────────────────
+                // Questionnaire keys define the canonical department set;
+                // any extra keys the model returns are appended after.
+                Set<String> allDepartments = new LinkedHashSet<>(questionnaireScores.keySet());
+                if (modelAvailable) {
+                        allDepartments.addAll(modelScores.keySet());
+                }
+
+                List<PredictionResponse.DepartmentScore> departmentScores = allDepartments.stream()
+                                .map(dept -> buildDepartmentScore(
+                                                dept, questionnaireScores, modelScores, modelAvailable, qWeight,
+                                                mWeight))
+                                .sorted(Comparator.comparing(
+                                                PredictionResponse.DepartmentScore::getCombinedScore,
+                                                Comparator.reverseOrder()))
+                                .collect(Collectors.toList());
+
+                // ── Step 6: Assemble response ─────────────────────────────────────────
+                String topDepartment = departmentScores.isEmpty()
+                                ? "Unknown"
+                                : departmentScores.get(0).getDepartment();
+
+                PredictionResponse response = PredictionResponse.builder()
+                                .departmentScores(departmentScores)
+                                .topDepartment(topDepartment)
+                                .modelAvailable(modelAvailable)
+                                .modelVersion(modelVersion)
+                                .weights(PredictionResponse.PredictionWeights.builder()
+                                                .questionnaire(qWeight)
+                                                .model(mWeight)
+                                                .build())
+                                .build();
+
+                if (!modelAvailable) {
+                        response.setWarning(
+                                        "The ML model is currently unavailable. " +
+                                                        "Recommendation is based on questionnaire scores only.");
+                }
+
+                log.info("Prediction complete — topDepartment={}, modelAvailable={}",
+                                topDepartment, modelAvailable);
+
+                return response;
         }
 
-        log.info("Prediction complete: top={}, modelAvailable={}", topDepartment, modelAvailable);
+        // ──────────────────────────────────────────────────────────────────────────
+        // Private helpers
+        // ──────────────────────────────────────────────────────────────────────────
 
-        return response;
-    }
+        private PredictionResponse.DepartmentScore buildDepartmentScore(
+                        String dept,
+                        Map<String, BigDecimal> questionnaireScores,
+                        Map<String, BigDecimal> modelScores,
+                        boolean modelAvailable,
+                        BigDecimal qWeight,
+                        BigDecimal mWeight) {
 
-    /**
-     * Combines questionnaire scores and model predictions.
-     *
-     * If model is available: weighted average (50% questionnaire, 50% model).
-     * If model is unavailable: use questionnaire scores only.
-     *
-     * @param questionnaireScores normalized questionnaire scores
-     * @param modelPredictions    model probabilities
-     * @param modelAvailable      whether model is available
-     * @return combined scores
-     */
-    private Map<String, BigDecimal> combineScores(
-            Map<String, BigDecimal> questionnaireScores,
-            Map<String, BigDecimal> modelPredictions,
-            boolean modelAvailable) {
+                BigDecimal qScore = questionnaireScores
+                                .getOrDefault(dept, BigDecimal.ZERO)
+                                .setScale(SCORE_SCALE, RoundingMode.HALF_UP);
 
-        Map<String, BigDecimal> combined = new HashMap<>();
+                BigDecimal mScore = null;
+                BigDecimal combinedScore;
 
-        if (!modelAvailable || modelPredictions == null || modelPredictions.isEmpty()) {
-            // Model unavailable: use questionnaire only
-            combined.putAll(questionnaireScores);
-        } else {
-            // Model available: weighted average
-            BigDecimal weight = BigDecimal.valueOf(0.5);
-            for (String dept : questionnaireScores.keySet()) {
-                BigDecimal qScore = questionnaireScores.getOrDefault(dept, BigDecimal.ZERO);
-                BigDecimal mScore = modelPredictions.getOrDefault(dept, BigDecimal.ZERO);
+                if (modelAvailable && modelScores != null) {
+                        mScore = modelScores
+                                        .getOrDefault(dept, BigDecimal.ZERO)
+                                        .setScale(SCORE_SCALE, RoundingMode.HALF_UP);
 
-                BigDecimal combinedScore = qScore.multiply(weight)
-                        .add(mScore.multiply(weight));
+                        combinedScore = qScore.multiply(qWeight)
+                                        .add(mScore.multiply(mWeight))
+                                        .setScale(SCORE_SCALE, RoundingMode.HALF_UP);
+                } else {
+                        combinedScore = qScore;
+                }
 
-                combined.put(dept, combinedScore.setScale(4, java.math.RoundingMode.HALF_UP));
-            }
+                return PredictionResponse.DepartmentScore.builder()
+                                .department(dept)
+                                .questionnaireScore(qScore)
+                                .modelScore(mScore)
+                                .combinedScore(combinedScore)
+                                .build();
         }
 
-        return combined;
-    }
-
-    /**
-     * Finds the top department from combined scores.
-     *
-     * @param combined combined department scores
-     * @return name of top department
-     */
-    private String findTopDepartment(Map<String, BigDecimal> combined) {
-        return combined.entrySet().stream()
-                .max(Map.Entry.comparingByValue())
-                .map(Map.Entry::getKey)
-                .orElse("Web"); // Default fallback
-    }
+        private CourseDataDto toCourseDataDto(CourseRegistration cr) {
+                return CourseDataDto.builder()
+                                .code(cr.getCode())
+                                .termWork(cr.getTermWork())
+                                .examWork(cr.getExamWork())
+                                .result(cr.getResult())
+                                .grade(cr.getGrade())
+                                .points(cr.getPoints())
+                                .build();
+        }
 }

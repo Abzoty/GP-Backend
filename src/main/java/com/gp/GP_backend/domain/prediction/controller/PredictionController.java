@@ -3,13 +3,13 @@ package com.gp.GP_backend.domain.prediction.controller;
 import com.gp.GP_backend.domain.prediction.dto.PredictionRequest;
 import com.gp.GP_backend.domain.prediction.dto.PredictionResponse;
 import com.gp.GP_backend.domain.prediction.service.PredictionOrchestrationService;
+import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.shared.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,8 +21,11 @@ import org.springframework.web.bind.annotation.RestController;
  * All endpoints require JWT authentication.
  *
  * Paths:
- * - POST /api/v1/predictions/department : get department prediction based on
- * questionnaire answers and course registrations
+ * - POST /api/v1/predictions/department
+ * Body : { questionnaireAnswers: { 1: "1A", 2: "2C", ... } }
+ * Courses are loaded automatically from the authenticated user's account.
+ * Returns per-department scores from the questionnaire, the ML model,
+ * and a weighted combination — structured for direct chart consumption.
  *
  * @since 1.0
  */
@@ -35,20 +38,25 @@ public class PredictionController {
     private final PredictionOrchestrationService orchestrationService;
 
     /**
-     * Get a department prediction based on questionnaire answers and courses.
+     * Predict the most suitable department.
      *
-     * @param request prediction request (questionnaire answers + course codes)
-     * @param user    authenticated user (context)
-     * @return 200 OK with prediction response
+     * The client submits only questionnaire answers. The server fetches the
+     * authenticated user's course registrations internally, calls the Python
+     * ML service, combines the two score sources, and returns a response
+     * ready for bar / radar chart rendering.
+     *
+     * @param user    the authenticated user — used to load course registrations
+     * @param request questionnaire answers (question ID → answer choice ID)
+     * @return 200 OK with {@link PredictionResponse}
      */
     @PostMapping("/department")
     public ResponseEntity<ApiResponse<PredictionResponse>> predictDepartment(
-            @Valid @RequestBody PredictionRequest request,
-            @AuthenticationPrincipal UserDetails user) {
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody PredictionRequest request) {
 
-        log.info("Prediction request from user: {}", user.getUsername());
+        log.info("Prediction request received from user: {}", user.getUsername());
 
-        PredictionResponse response = orchestrationService.predict(request);
+        PredictionResponse response = orchestrationService.predict(user, request);
 
         return ResponseEntity.ok(ApiResponse.ok("Department prediction generated", response));
     }
