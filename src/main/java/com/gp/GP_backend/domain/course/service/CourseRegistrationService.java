@@ -24,13 +24,15 @@ import java.util.stream.Collectors;
  * Business logic for course registration.
  *
  * Responsibilities:
- * - Register a new course with derived grade/result/points
- * - Update an existing registration and recalculate grades
+ * - Register a new course with optional grades (can be null for pending state)
+ * - Update an existing registration and recalculate grades if provided
  * - Retrieve current (non-closed) and all registrations for a user
  * - Validate course existence and ownership
  *
- * All grade/result/points derivations happen here, not in the DTO or
- * controller.
+ * Grade calculation logic:
+ * - If both termWork and examWork are provided: derive result, grade, points
+ * - If both are null: all grade-related fields remain null (pending)
+ * - If only one is provided: throw validation error (both-or-nothing)
  *
  * @since 1.0
  */
@@ -49,13 +51,16 @@ public class CourseRegistrationService {
      *
      * - Validates course code exists in catalog
      * - Checks for duplicate (user, code) enrollment
-     * - Computes result, grade, points from termWork and examWork
+     * - If both termWork and examWork are provided: computes result, grade, points
+     * - If both are null: leaves grade fields null (pending state)
+     * - If only one is provided: throws validation error
      * - Persists the registration
      *
      * @param user    the user registering
      * @param request the registration request
      * @return the created registration as a response DTO
-     * @throws ApiException 400 if course code not found or invalid input
+     * @throws ApiException 400 if course code not found, invalid input, or
+     *                      incomplete grades
      * @throws ApiException 409 if duplicate registration already exists
      */
     @Transactional
@@ -71,10 +76,32 @@ public class CourseRegistrationService {
                     "User is already registered for course: " + request.getCode());
         }
 
-        // Compute derived fields
-        BigDecimal result = request.getTermWork().add(request.getExamWork());
-        String grade = referenceDataService.resolveGrade(result);
-        BigDecimal points = referenceDataService.resolvePoints(result);
+        // Validate and compute derived fields
+        BigDecimal result = null;
+        String grade = null;
+        BigDecimal points = null;
+
+        boolean hasTermWork = request.getTermWork() != null;
+        boolean hasExamWork = request.getExamWork() != null;
+
+        // Both-or-nothing validation: either both provided or both null
+        if (hasTermWork != hasExamWork) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "Both termWork and examWork must be provided together, or both left null. " +
+                            "Partial grade submission is not allowed.");
+        }
+
+        // If both grades are provided, calculate derived fields
+        if (hasTermWork && hasExamWork) {
+            result = request.getTermWork().add(request.getExamWork());
+            grade = referenceDataService.resolveGrade(result);
+            points = referenceDataService.resolvePoints(result);
+
+            log.debug("Grades provided during registration: result={}, grade={}, points={}", result, grade, points);
+        } else {
+            log.debug("Course registered with pending grades (null state)");
+        }
 
         // Create entity
         CourseRegistration registration = CourseRegistration.builder()
@@ -90,8 +117,13 @@ public class CourseRegistrationService {
 
         try {
             CourseRegistration saved = courseRegistrationRepository.save(registration);
-            log.info("Course registered: user={}, course={}, result={}, grade={}",
-                    user.getId(), request.getCode(), result, grade);
+            if (grade != null) {
+                log.info("Course registered with grades: user={}, course={}, result={}, grade={}",
+                        user.getId(), request.getCode(), result, grade);
+            } else {
+                log.info("Course registered with pending grades: user={}, course={}",
+                        user.getId(), request.getCode());
+            }
             return mapToResponse(saved);
         } catch (DataIntegrityViolationException e) {
             // Race condition: another request registered the same course
@@ -107,13 +139,19 @@ public class CourseRegistrationService {
      * Updates an existing course registration.
      *
      * PATCH semantics: only non-null fields in the request are applied.
-     * If termWork or examWork changes, result, grade, and points are recalculated.
-     * The closed flag can be updated independently.
+     *
+     * Grade update logic:
+     * - If termWork is provided: examWork must also be provided (or already exist)
+     * - If examWork is provided: termWork must also be provided (or already exist)
+     * - If both new values are provided: recalculate result, grade, points
+     * - If one new value + one existing value: recalculate with combined values
+     * - If closed changes: update without affecting grades
      *
      * @param user           the user who owns the registration
      * @param registrationId the ID of the registration to update
      * @param request        the update request
      * @return the updated registration as a response DTO
+     * @throws ApiException 400 if incomplete grades provided
      * @throws ApiException 403 if user does not own the registration
      * @throws ApiException 404 if registration not found
      */
@@ -123,33 +161,65 @@ public class CourseRegistrationService {
         CourseRegistration registration = getOwnedRegistration(user, registrationId);
 
         boolean needsRecalculation = false;
+        BigDecimal newTermWork = registration.getTermWork();
+        BigDecimal newExamWork = registration.getExamWork();
 
         // Update termWork if provided
         if (request.getTermWork() != null) {
-            registration.setTermWork(request.getTermWork());
+            newTermWork = request.getTermWork();
             needsRecalculation = true;
         }
 
         // Update examWork if provided
         if (request.getExamWork() != null) {
-            registration.setExamWork(request.getExamWork());
+            newExamWork = request.getExamWork();
             needsRecalculation = true;
         }
 
-        // Update closed if provided
-        if (request.getClosed() != null) {
-            registration.setClosed(request.getClosed());
+        // Validate grade state consistency
+        if (needsRecalculation) {
+            boolean hasTermWork = newTermWork != null;
+            boolean hasExamWork = newExamWork != null;
+
+            // Both-or-nothing validation for grades
+            if (hasTermWork != hasExamWork) {
+                throw new ApiException(
+                        HttpStatus.BAD_REQUEST,
+                        "Both termWork and examWork must be provided together, or both left null. " +
+                                "Partial grade submission is not allowed.");
+            }
+
+            // Recalculate derived fields if both grades are present
+            if (hasTermWork && hasExamWork) {
+                BigDecimal result = newTermWork.add(newExamWork);
+                registration.setTermWork(newTermWork);
+                registration.setExamWork(newExamWork);
+                registration.setResult(result);
+                registration.setGrade(referenceDataService.resolveGrade(result));
+                registration.setPoints(referenceDataService.resolvePoints(result));
+
+                log.info("Course registration updated with grades: id={}, user={}, course={}, " +
+                        "result={}, grade={}, points={}",
+                        registrationId, user.getId(), registration.getCode(), result,
+                        registration.getGrade(), registration.getPoints());
+            } else {
+                // Both grades being cleared to null (pending state)
+                registration.setTermWork(null);
+                registration.setExamWork(null);
+                registration.setResult(null);
+                registration.setGrade(null);
+                registration.setPoints(null);
+
+                log.info("Course registration updated to pending grades: id={}, user={}, course={}",
+                        registrationId, user.getId(), registration.getCode());
+            }
         }
 
-        // Recalculate result, grade, points if either termWork or examWork changed
-        if (needsRecalculation) {
-            BigDecimal result = registration.getTermWork().add(registration.getExamWork());
-            registration.setResult(result);
-            registration.setGrade(referenceDataService.resolveGrade(result));
-            registration.setPoints(referenceDataService.resolvePoints(result));
-
-            log.info("Course registration updated: id={}, user={}, course={}, result={}, grade={}",
-                    registrationId, user.getId(), registration.getCode(), result, registration.getGrade());
+        // Update closed if provided (independent of grades)
+        if (request.getClosed() != null) {
+            registration.setClosed(request.getClosed());
+            log.debug("Course registration closed flag updated: id={}, closed={}",
+                    registrationId, request.getClosed());
         }
 
         CourseRegistration saved = courseRegistrationRepository.save(registration);
@@ -242,6 +312,7 @@ public class CourseRegistrationService {
 
     /**
      * Maps a CourseRegistration entity to a response DTO.
+     * Handles null values gracefully for pending grade states.
      */
     private CourseRegistrationResponse mapToResponse(CourseRegistration registration) {
         return modelMapper.map(registration, CourseRegistrationResponse.class);

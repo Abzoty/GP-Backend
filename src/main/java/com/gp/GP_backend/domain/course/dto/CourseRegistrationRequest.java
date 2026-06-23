@@ -13,13 +13,15 @@ import java.math.BigDecimal;
  *
  * Client supplies:
  * - code: the course code (validated against catalog)
- * - termWork: continuous assessment score (0–40)
- * - examWork: final exam score (0–60)
+ * - termWork: continuous assessment score (0–40), optional
+ * - examWork: final exam score (0–60), optional
  *
- * Server derives:
- * - result = termWork + examWork
- * - grade (from grade mapping)
- * - points (from grade mapping)
+ * Server behavior:
+ * - If both termWork and examWork are null: result, grade, points remain null
+ * (pending)
+ * - If both termWork and examWork are provided: result, grade, points are
+ * derived
+ * - If only one is provided: validation error (both-or-nothing requirement)
  * - closed = false (default)
  *
  * @since 1.0
@@ -40,18 +42,18 @@ public class CourseRegistrationRequest {
 
     /**
      * Term work score (continuous assessment).
-     * Must be between 0 and 40 (inclusive).
+     * Must be between 0 and 40 (inclusive), or null.
+     * If provided, examWork must also be provided.
      */
-    @NotNull(message = "Term work score is required")
     @DecimalMin(value = "0", inclusive = true, message = "Term work must be at least 0")
     @DecimalMax(value = "40", inclusive = true, message = "Term work must not exceed 40")
     private BigDecimal termWork;
 
     /**
      * Exam work score (final exam).
-     * Must be between 0 and 60 (inclusive).
+     * Must be between 0 and 60 (inclusive), or null.
+     * If provided, termWork must also be provided.
      */
-    @NotNull(message = "Exam work score is required")
     @DecimalMin(value = "0", inclusive = true, message = "Exam work must be at least 0")
     @DecimalMax(value = "60", inclusive = true, message = "Exam work must not exceed 60")
     private BigDecimal examWork;

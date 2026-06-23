@@ -12,7 +12,15 @@ import java.time.LocalDateTime;
  * Response DTO for course registrations.
  *
  * Contains all information about a course registration, including
- * the server-derived grade, result, and points.
+ * the server-derived grade, result, and points (which may be null if
+ * grades are pending).
+ *
+ * Nullable grade fields:
+ * - result: null if termWork and examWork haven't been provided yet
+ * - grade: null if termWork and examWork haven't been provided yet
+ * - points: null if termWork and examWork haven't been provided yet
+ * - termWork: null if not yet provided
+ * - examWork: null if not yet provided
  *
  * Note: userId is NOT included in the response (to avoid redundancy;
  * the user context is from the JWT token).
@@ -36,27 +44,27 @@ public class CourseRegistrationResponse {
     private String code;
 
     /**
-     * Term work score (continuous assessment).
+     * Term work score (continuous assessment), or null if pending.
      */
     private BigDecimal termWork;
 
     /**
-     * Exam work score (final exam).
+     * Exam work score (final exam), or null if pending.
      */
     private BigDecimal examWork;
 
     /**
-     * Total numeric result (termWork + examWork), range 0–100.
+     * Total numeric result (termWork + examWork), range 0–100, or null if pending.
      */
     private BigDecimal result;
 
     /**
-     * Letter grade (A+, A, B, ..., F).
+     * Letter grade (A+, A, B, ..., F), or null if pending.
      */
     private String grade;
 
     /**
-     * GPA points (0.0–4.0).
+     * GPA points (0.0–4.0), or null if pending.
      */
     private BigDecimal points;
 
