@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -23,19 +24,6 @@ import java.util.stream.Collectors;
 
 /**
  * Orchestrates the full department-prediction pipeline.
- *
- * Pipeline steps:
- * 1. Accept the pre-computed normalized questionnaire scores from the request.
- * 2. Load all of the authenticated user's course registrations from the DB.
- * 3. POST the course data to the Python ML service.
- * 4. Combine questionnaire scores + model probabilities (50 / 50 by default).
- * 5. Return a chart-ready PredictionResponse sorted by combined score.
- *
- * Graceful degradation: if the Python service is unreachable the response still
- * returns 200 with modelAvailable=false and combinedScore ==
- * questionnaireScore.
- *
- * @since 1.0
  */
 @Service
 @RequiredArgsConstructor
@@ -46,6 +34,16 @@ public class PredictionOrchestrationService {
         private static final BigDecimal MODEL_WEIGHT = new BigDecimal("0.5");
         private static final int SCORE_SCALE = 4;
 
+        // ── Department Name Mapping ────────────────────────────────────────────────
+        // Maps abbreviations to their canonical full names to prevent duplicates
+        // when combining questionnaire scores and ML model probabilities.
+        private static final Map<String, String> DEPARTMENT_NAME_MAP = Map.of(
+                        "CS", "Computer Science",
+                        "IS", "Information Systems",
+                        "IT", "Information Technology",
+                        "AI", "Artificial Intelligence",
+                        "DS", "Operation Research & Decision Support");
+
         private final PredictionServiceClient predictionServiceClient;
         private final CourseRegistrationRepository courseRegistrationRepository;
 
@@ -53,16 +51,12 @@ public class PredictionOrchestrationService {
 
         /**
          * Run the prediction pipeline.
-         *
-         * @param user    authenticated user — courses are loaded automatically
-         * @param request contains the normalized scores from the /score endpoint
-         * @return structured response with per-department breakdowns
          */
         public PredictionResponse predict(User user, PredictionRequest request) {
                 log.info("Starting prediction pipeline for user={}", user.getId());
 
-                // ── Step 1: Use the normalized scores the client already computed ─────
-                Map<String, BigDecimal> questionnaireScores = request.getNormalizedScores();
+                // ── Step 1: Normalize questionnaire scores to full department names ───
+                Map<String, BigDecimal> questionnaireScores = normalizeDepartmentKeys(request.getNormalizedScores());
                 log.debug("Questionnaire normalized scores received: {}", questionnaireScores);
 
                 // ── Step 2: Fetch all course registrations for this user ──────────────
@@ -81,7 +75,10 @@ public class PredictionOrchestrationService {
                                 && pythonResponse.getProbabilities() != null
                                 && !pythonResponse.getProbabilities().isEmpty();
 
-                Map<String, BigDecimal> modelScores = modelAvailable ? pythonResponse.getProbabilities() : null;
+                // Normalize model scores to full department names as well
+                Map<String, BigDecimal> modelScores = modelAvailable
+                                ? normalizeDepartmentKeys(pythonResponse.getProbabilities())
+                                : null;
                 String modelVersion = modelAvailable ? pythonResponse.getModelVersion() : null;
 
                 log.info("Python service — available={}, probabilities={}", modelAvailable, modelScores);
@@ -91,8 +88,7 @@ public class PredictionOrchestrationService {
                 BigDecimal mWeight = modelAvailable ? MODEL_WEIGHT : BigDecimal.ZERO;
 
                 // ── Step 5: Build per-department score list ───────────────────────────
-                // Questionnaire keys define the canonical department set;
-                // any extra keys the model returns are appended after.
+                // Now that both maps use full names, the Set will naturally prevent duplicates.
                 Set<String> allDepartments = new LinkedHashSet<>(questionnaireScores.keySet());
                 if (modelAvailable) {
                         allDepartments.addAll(modelScores.keySet());
@@ -138,6 +134,25 @@ public class PredictionOrchestrationService {
         // ──────────────────────────────────────────────────────────────────────────
         // Private helpers
         // ──────────────────────────────────────────────────────────────────────────
+
+        /**
+         * Normalizes department keys (e.g., "CS" -> "Computer Science").
+         * If a key is already a full name or not in the map, it remains unchanged.
+         */
+        private Map<String, BigDecimal> normalizeDepartmentKeys(Map<String, BigDecimal> scores) {
+                if (scores == null || scores.isEmpty()) {
+                        return scores;
+                }
+                Map<String, BigDecimal> normalized = new LinkedHashMap<>();
+                for (Map.Entry<String, BigDecimal> entry : scores.entrySet()) {
+                        // Map abbreviation to full name, or keep original if not found
+                        String fullName = DEPARTMENT_NAME_MAP.getOrDefault(entry.getKey(), entry.getKey());
+
+                        // Merge scores in case both abbreviation and full name were somehow present
+                        normalized.merge(fullName, entry.getValue(), BigDecimal::add);
+                }
+                return normalized;
+        }
 
         private PredictionResponse.DepartmentScore buildDepartmentScore(
                         String dept,
