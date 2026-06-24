@@ -1,6 +1,6 @@
 package com.gp.GP_backend.domain.recommendation.service;
 
-import com.gp.GP_backend.domain.recommendation.client.PythonRecommendationClient;
+import com.gp.GP_backend.domain.recommendation.client.RecommendationClient;
 import com.gp.GP_backend.domain.recommendation.dto.SpaceRankingResponse;
 import com.gp.GP_backend.domain.recommendation.dto.SpaceRecommendationRankRequest;
 import com.gp.GP_backend.domain.recommendation.dto.SpaceRecommendationResponse;
@@ -10,9 +10,9 @@ import com.gp.GP_backend.domain.space.entity.SpaceCategory;
 import com.gp.GP_backend.domain.space.entity.SpaceMembership;
 import com.gp.GP_backend.domain.space.repository.SpaceMembershipRepository;
 import com.gp.GP_backend.domain.space.repository.SpaceRepository;
-import com.gp.GP_backend.domain.user.entity.CourseRegistered;
+import com.gp.GP_backend.domain.course.entity.CourseRegistration;
 import com.gp.GP_backend.domain.user.entity.User;
-import com.gp.GP_backend.domain.user.repository.CourseRegisteredRepository;
+import com.gp.GP_backend.domain.course.repository.CourseRegistrationRepository;
 import com.gp.GP_backend.domain.user.repository.UserRepository;
 import com.gp.GP_backend.shared.exception.ApiException;
 import lombok.RequiredArgsConstructor;
@@ -46,10 +46,10 @@ public class SpaceRecommendationService {
     private static final int MAX_REQUEST_CANDIDATES = 300;
 
     private final UserRepository userRepository;
-    private final CourseRegisteredRepository courseRegisteredRepository;
+    private final CourseRegistrationRepository courseRegistrationRepository;
     private final SpaceMembershipRepository membershipRepository;
     private final SpaceRepository spaceRepository;
-    private final PythonRecommendationClient recommendationClient;
+    private final RecommendationClient recommendationClient;
 
     @Transactional(readOnly = true)
     public List<SpaceRecommendationResponse> recommend(UUID userId, int topN) {
@@ -255,8 +255,8 @@ public class SpaceRecommendationService {
     }
 
     private List<String> getCurrentCourseCodes(UUID userId) {
-        return courseRegisteredRepository.findByUserIdAndIsCurrentTrue(userId).stream()
-                .map(CourseRegistered::getCourseCode)
+        return courseRegistrationRepository.findByUserIdAndClosedFalse(userId).stream()
+                .map(CourseRegistration::getCode)
                 .filter(Objects::nonNull)
                 .map(String::trim)
                 .filter(code -> !code.isBlank())

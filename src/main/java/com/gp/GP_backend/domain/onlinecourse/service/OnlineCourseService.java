@@ -3,8 +3,8 @@ package com.gp.GP_backend.domain.onlinecourse.service;
 import com.gp.GP_backend.domain.onlinecourse.dto.OnlineCourseResponse;
 import com.gp.GP_backend.domain.onlinecourse.entity.OnlineCourse;
 import com.gp.GP_backend.domain.onlinecourse.repository.OnlineCourseRepository;
-import com.gp.GP_backend.domain.user.entity.CourseRegistered;
-import com.gp.GP_backend.domain.user.repository.CourseRegisteredRepository;
+import com.gp.GP_backend.domain.course.entity.CourseRegistration;
+import com.gp.GP_backend.domain.course.repository.CourseRegistrationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,16 +19,14 @@ import java.util.UUID;
 public class OnlineCourseService {
 
     private final OnlineCourseRepository onlineCourseRepository;
-    private final CourseRegisteredRepository courseRegisteredRepository;
+    private final CourseRegistrationRepository courseRegistrationRepository;
 
     @Transactional(readOnly = true)
     public List<OnlineCourseResponse> getCoursesForStudent(UUID userId) {
         // 1. Get all course codes the student is registered in
-        List<String> registeredCodes = courseRegisteredRepository
-            .findByUserId(userId)
-            .stream()
-            .filter(c-> c.getIsCurrent()==true)
-            .map(CourseRegistered::getCourseCode)
+        List<String> registeredCodes = courseRegistrationRepository
+            .findByUserIdAndClosedFalse(userId).stream()
+            .map(CourseRegistration::getCode)
             .filter(code -> code != null && !code.isBlank())
             .distinct()
             .toList();
