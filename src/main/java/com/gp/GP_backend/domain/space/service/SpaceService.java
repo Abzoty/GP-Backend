@@ -438,7 +438,9 @@ public class SpaceService {
         // Single round-trip: if membership exists, we fetch the Space + createdBy eagerly.
         SpaceMembership membership = membershipRepository.findBySpaceIdAndUserIdWithSpaceAndCreator(spaceId, userId)
                 .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "You are not a member of this space"));
-        return toResponse(membership.getSpace());
+        SpaceResponse resp = toResponse(membership.getSpace());
+        resp.setRole(membership.getRole());
+        return resp;
     }
 
     @Transactional(readOnly = true)
@@ -446,7 +448,23 @@ public class SpaceService {
         // Fetch Space + createdBy in the same query to avoid N+1 lazy-loads in toResponse(...).
         List<SpaceMembership> memberships = membershipRepository.findByUserIdWithSpace(userId);
         return memberships.stream()
-                .map(m -> toResponse(m.getSpace()))
+                .map(m -> {
+                    SpaceResponse resp = toResponse(m.getSpace());
+                    resp.setRole(m.getRole());
+                    return resp;
+                })
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MembershipResponse> getSpaceMembers(UUID spaceId, UUID userId) {
+        requireSpace(spaceId);
+        if (!isMemberInSpace(spaceId, userId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "You are not a member of this space");
+        }
+        return membershipRepository.findBySpace_Id(spaceId)
+                .stream()
+                .map(this::toMembershipResponse)
                 .toList();
     }
 

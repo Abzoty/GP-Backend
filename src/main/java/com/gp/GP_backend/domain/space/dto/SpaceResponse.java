@@ -37,4 +37,6 @@ public class SpaceResponse {
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private Double similarityScore;
+
+    private String role;
 }

@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.domain.Page;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service;
 import com.gp.GP_backend.domain.material.entity.Material;
 import com.gp.GP_backend.domain.notification.dto.NotificationResponse;
 import com.gp.GP_backend.domain.notification.entity.Notification;
+import com.gp.GP_backend.domain.notification.entity.NotificationPreference;
 import com.gp.GP_backend.domain.notification.entity.NotificationType;
 import com.gp.GP_backend.domain.notification.entity.ReferenceType;
 import com.gp.GP_backend.domain.notification.repository.NotificationPreferencesRepository;
@@ -270,6 +272,19 @@ public class NotificationService {
     public boolean toggleInAppNotifications(UUID userId) {
         boolean isActive = userRepository.isActiveById(userId);
         if (!isActive) throw new ApiException(HttpStatus.NOT_FOUND, "User not found");
+
+        Optional<NotificationPreference> prefOpt = notificationPreferencesRepository.findPreferenceByUserId(userId);
+        if (prefOpt.isEmpty()) {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
+            NotificationPreference pref = NotificationPreference.builder()
+                    .user(user)
+                    .inApp(false) // toggled value (default is true)
+                    .email(true)  // default is true
+                    .build();
+            notificationPreferencesRepository.save(pref);
+            return true;
+        }
         return notificationPreferencesRepository.toggleInAppNotifications(userId) > 0;
     }
 
@@ -277,6 +292,19 @@ public class NotificationService {
     public boolean toggleEmailNotifications(UUID userId) {
         boolean isActive = userRepository.isActiveById(userId);
         if (!isActive) throw new ApiException(HttpStatus.NOT_FOUND, "User not found");
+
+        Optional<NotificationPreference> prefOpt = notificationPreferencesRepository.findPreferenceByUserId(userId);
+        if (prefOpt.isEmpty()) {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
+            NotificationPreference pref = NotificationPreference.builder()
+                    .user(user)
+                    .inApp(true)  // default is true
+                    .email(false) // toggled value (default is true)
+                    .build();
+            notificationPreferencesRepository.save(pref);
+            return true;
+        }
         return notificationPreferencesRepository.toggleEmailNotifications(userId) > 0;
     }
 }

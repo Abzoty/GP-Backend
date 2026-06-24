@@ -117,6 +117,15 @@ public class SpaceController {
         return ResponseEntity.ok(ApiResponse.ok("Spaces retrieved successfully", spaces));
     }
 
+    @GetMapping("/{spaceId}/members")
+    @Operation(summary = "Retrieve members of a space")
+    public ResponseEntity<ApiResponse<List<MembershipResponse>>> getSpaceMembers(
+            @PathVariable UUID spaceId,
+            @AuthenticationPrincipal User currentUser) {
+        List<MembershipResponse> members = spaceService.getSpaceMembers(spaceId, currentUser.getId());
+        return ResponseEntity.ok(ApiResponse.ok("Space members retrieved successfully", members));
+    }
+
     // ─── Search ───────────────────────────────────────────────────────────────
 
     /**

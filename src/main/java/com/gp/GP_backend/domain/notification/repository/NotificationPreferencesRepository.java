@@ -2,6 +2,7 @@ package com.gp.GP_backend.domain.notification.repository;
 
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,6 +16,8 @@ import com.gp.GP_backend.domain.user.entity.User;
 
 public interface NotificationPreferencesRepository extends JpaRepository<NotificationPreference, UUID> {
 
+    @Query("SELECT n FROM NotificationPreference n WHERE n.user.id = :userId")
+    Optional<NotificationPreference> findPreferenceByUserId(@Param("userId") UUID userId);
 
     @Query("SELECT n FROM Notification n WHERE n.recipient.id = :userId")
     Notification findByUserId(@Param("userId") UUID userId);
