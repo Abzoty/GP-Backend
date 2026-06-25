@@ -16,9 +16,6 @@ import org.springframework.web.client.RestClient;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
-/**
- * HTTP client for the Python FastAPI prediction service.
- */
 @Service
 @Slf4j
 public class PredictionServiceClient {
@@ -47,10 +44,6 @@ public class PredictionServiceClient {
                                 serviceUrl, connectTimeoutMs, readTimeoutMs);
         }
 
-        /**
-         * Sends course data to the Python service and retrieves department
-         * probabilities.
-         */
         @CircuitBreaker(name = "prediction-service", fallbackMethod = "predictFallback")
         public PythonServiceResponse predict(PythonServiceRequest request) {
                 log.info("Calling Python prediction service — {} course(s) in payload",
@@ -61,26 +54,24 @@ public class PredictionServiceClient {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(request)
                                 .retrieve()
-                                // ── THE FIX: Compare the integer value (422), NOT the object reference! ──
+                                // ── THE FIX: Compare the integer value (422) ──
                                 .onStatus(
                                                 status -> status.value() == 422,
                                                 (req, resp) -> {
                                                         try {
-                                                                // Read the raw JSON error body from the Python service
                                                                 String body = new String(resp.getBody().readAllBytes(),
                                                                                 StandardCharsets.UTF_8);
                                                                 log.debug("Python service 422 body: {}", body);
 
-                                                                // Parse it into our DTO
                                                                 PythonErrorResponse error = objectMapper.readValue(body,
                                                                                 PythonErrorResponse.class);
 
-                                                                // Throw the business exception so it bypasses the
-                                                                // "model unavailable" fallback
                                                                 throw new InsufficientCourseDataException(
                                                                                 error.getMessage(),
                                                                                 error.getMissingCourses(),
-                                                                                error.getIncompleteCourses());
+                                                                                error.getIncompleteCourses()); // Now
+                                                                                                               // passes
+                                                                                                               // List<String>
 
                                                         } catch (IOException e) {
                                                                 log.error("Failed to parse 422 error response from Python service",
@@ -98,24 +89,14 @@ public class PredictionServiceClient {
                 return response;
         }
 
-        /**
-         * Circuit-breaker fallback.
-         * Rethrows InsufficientCourseDataException so the controller can return HTTP
-         * 422.
-         * Returns null for genuine infrastructure failures (timeouts, 5xx, etc.).
-         */
         public PythonServiceResponse predictFallback(PythonServiceRequest request, Throwable ex) {
-
-                // If it's our custom validation exception, rethrow it immediately!
                 if (ex instanceof InsufficientCourseDataException) {
                         throw (InsufficientCourseDataException) ex;
                 }
-                // Safety net in case Resilience4j wrapped the exception
                 if (ex.getCause() instanceof InsufficientCourseDataException) {
                         throw (InsufficientCourseDataException) ex.getCause();
                 }
 
-                // Otherwise, it's a real connectivity/server failure -> degrade gracefully
                 log.warn("Prediction service fallback triggered — cause: {}: {}",
                                 ex.getClass().getSimpleName(), ex.getMessage());
                 return null;

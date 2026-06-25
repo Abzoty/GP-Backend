@@ -54,8 +54,7 @@ public class CourseValidationErrorDetails {
 
     /**
      * Courses the student is registered for but whose grade has not
-     * been finalised yet. Each entry contains {@code "code"} and
-     * {@code "missing_fields"}.
+     * been finalised yet. Each entry contains {@code "code"}
      */
-    private List<Map<String, Object>> incompleteCourses;
+    private List<String> incompleteCourses;
 }
