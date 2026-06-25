@@ -1,7 +1,10 @@
 package com.gp.GP_backend.domain.prediction.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.gp.GP_backend.domain.prediction.dto.PythonErrorResponse;
 import com.gp.GP_backend.domain.prediction.dto.PythonServiceRequest;
 import com.gp.GP_backend.domain.prediction.dto.PythonServiceResponse;
+import com.gp.GP_backend.domain.prediction.exception.InsufficientCourseDataException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,38 +13,24 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
 /**
  * HTTP client for the Python FastAPI prediction service.
- *
- * Calls {@code POST /predict} on the Python service, passing course data and
- * receiving department probabilities.
- *
- * Resilience:
- * - Resilience4j circuit breaker ("prediction-service") wraps every call.
- * - Configurable connect + read timeouts prevent thread starvation.
- * - Fallback returns {@code null}, which the orchestration service treats as
- * "model unavailable" and falls back to questionnaire-only scoring.
- *
- * Configuration (application.properties / application.yml):
- * 
- * <pre>
- * prediction.service.url=http://localhost:5002
- * prediction.service.connect-timeout-ms=5000
- * prediction.service.read-timeout-ms=30000
- * </pre>
- *
- * @since 1.0
  */
 @Service
 @Slf4j
 public class PredictionServiceClient {
 
         private final RestClient restClient;
+        private final ObjectMapper objectMapper;
 
         public PredictionServiceClient(
                         @Value("${prediction.service.url:http://localhost:5002}") String serviceUrl,
                         @Value("${prediction.service.connect-timeout-ms:5000}") int connectTimeoutMs,
-                        @Value("${prediction.service.read-timeout-ms:30000}") int readTimeoutMs) {
+                        @Value("${prediction.service.read-timeout-ms:30000}") int readTimeoutMs,
+                        ObjectMapper objectMapper) {
 
                 SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
                 factory.setConnectTimeout(connectTimeoutMs);
@@ -52,6 +41,8 @@ public class PredictionServiceClient {
                                 .requestFactory(factory)
                                 .build();
 
+                this.objectMapper = objectMapper;
+
                 log.info("PredictionServiceClient ready — url={}, connectTimeout={}ms, readTimeout={}ms",
                                 serviceUrl, connectTimeoutMs, readTimeoutMs);
         }
@@ -59,13 +50,6 @@ public class PredictionServiceClient {
         /**
          * Sends course data to the Python service and retrieves department
          * probabilities.
-         *
-         * The Python service is responsible for all feature engineering (one-hot
-         * encoding, GPA averages, etc.) and model inference.
-         *
-         * @param request course data for the current user
-         * @return model response containing department probabilities, or {@code null}
-         *         if the service is unreachable or the circuit breaker is open
          */
         @CircuitBreaker(name = "prediction-service", fallbackMethod = "predictFallback")
         public PythonServiceResponse predict(PythonServiceRequest request) {
@@ -77,6 +61,35 @@ public class PredictionServiceClient {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(request)
                                 .retrieve()
+                                // ── THE FIX: Compare the integer value (422), NOT the object reference! ──
+                                .onStatus(
+                                                status -> status.value() == 422,
+                                                (req, resp) -> {
+                                                        try {
+                                                                // Read the raw JSON error body from the Python service
+                                                                String body = new String(resp.getBody().readAllBytes(),
+                                                                                StandardCharsets.UTF_8);
+                                                                log.debug("Python service 422 body: {}", body);
+
+                                                                // Parse it into our DTO
+                                                                PythonErrorResponse error = objectMapper.readValue(body,
+                                                                                PythonErrorResponse.class);
+
+                                                                // Throw the business exception so it bypasses the
+                                                                // "model unavailable" fallback
+                                                                throw new InsufficientCourseDataException(
+                                                                                error.getMessage(),
+                                                                                error.getMissingCourses(),
+                                                                                error.getIncompleteCourses());
+
+                                                        } catch (IOException e) {
+                                                                log.error("Failed to parse 422 error response from Python service",
+                                                                                e);
+                                                                throw new RuntimeException(
+                                                                                "Failed to parse error response from Python service",
+                                                                                e);
+                                                        }
+                                                })
                                 .body(PythonServiceResponse.class);
 
                 log.info("Python service responded — probabilities={}",
@@ -87,15 +100,22 @@ public class PredictionServiceClient {
 
         /**
          * Circuit-breaker fallback.
-         *
-         * Returns {@code null} so the orchestration service can degrade gracefully
-         * to questionnaire-only scores instead of surfacing a 500 to the client.
-         *
-         * @param request the original request (unused in fallback)
-         * @param ex      the exception that triggered the fallback
-         * @return null — signals "model unavailable" to the orchestration service
+         * Rethrows InsufficientCourseDataException so the controller can return HTTP
+         * 422.
+         * Returns null for genuine infrastructure failures (timeouts, 5xx, etc.).
          */
         public PythonServiceResponse predictFallback(PythonServiceRequest request, Throwable ex) {
+
+                // If it's our custom validation exception, rethrow it immediately!
+                if (ex instanceof InsufficientCourseDataException) {
+                        throw (InsufficientCourseDataException) ex;
+                }
+                // Safety net in case Resilience4j wrapped the exception
+                if (ex.getCause() instanceof InsufficientCourseDataException) {
+                        throw (InsufficientCourseDataException) ex.getCause();
+                }
+
+                // Otherwise, it's a real connectivity/server failure -> degrade gracefully
                 log.warn("Prediction service fallback triggered — cause: {}: {}",
                                 ex.getClass().getSimpleName(), ex.getMessage());
                 return null;

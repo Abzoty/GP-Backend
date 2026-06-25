@@ -1,15 +1,19 @@
 package com.gp.GP_backend.domain.prediction.controller;
 
+import com.gp.GP_backend.domain.prediction.dto.CourseValidationErrorDetails;
 import com.gp.GP_backend.domain.prediction.dto.PredictionRequest;
 import com.gp.GP_backend.domain.prediction.dto.PredictionResponse;
+import com.gp.GP_backend.domain.prediction.exception.InsufficientCourseDataException;
 import com.gp.GP_backend.domain.prediction.service.PredictionOrchestrationService;
 import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.shared.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,13 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
  * REST controller for department prediction endpoints.
  *
  * All endpoints require JWT authentication.
- *
- * Paths:
- * - POST /api/v1/predictions/department
- * Body : { questionnaireAnswers: { 1: "1A", 2: "2C", ... } }
- * Courses are loaded automatically from the authenticated user's account.
- * Returns per-department scores from the questionnaire, the ML model,
- * and a weighted combination — structured for direct chart consumption.
  *
  * @since 1.0
  */
@@ -39,15 +36,6 @@ public class PredictionController {
 
     /**
      * Predict the most suitable department.
-     *
-     * The client submits only questionnaire answers. The server fetches the
-     * authenticated user's course registrations internally, calls the Python
-     * ML service, combines the two score sources, and returns a response
-     * ready for bar / radar chart rendering.
-     *
-     * @param user    the authenticated user — used to load course registrations
-     * @param request questionnaire answers (question ID → answer choice ID)
-     * @return 200 OK with {@link PredictionResponse}
      */
     @PostMapping("/department")
     public ResponseEntity<ApiResponse<PredictionResponse>> predictDepartment(
@@ -59,5 +47,41 @@ public class PredictionController {
         PredictionResponse response = orchestrationService.predict(user, request);
 
         return ResponseEntity.ok(ApiResponse.ok("Department prediction generated", response));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // 422 handler — surfaces insufficient course data to the frontend
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Handles {@link InsufficientCourseDataException} thrown when the Python ML
+     * service rejects the prediction because the student hasn't completed enough
+     * courses.
+     *
+     * Returns HTTP 422 with a body listing exactly which courses are missing
+     * and which are registered but still awaiting a final grade, so the
+     * frontend can show an actionable message and redirect the student to
+     * course registration.
+     */
+    @ExceptionHandler(InsufficientCourseDataException.class)
+    public ResponseEntity<ApiResponse<CourseValidationErrorDetails>> handleInsufficientCourseData(
+            InsufficientCourseDataException ex) {
+
+        log.warn("Prediction rejected — missing={}, incomplete={}",
+                ex.getMissingCourses(), ex.getIncompleteCourses());
+
+        CourseValidationErrorDetails details = CourseValidationErrorDetails.builder()
+                .error("INSUFFICIENT_COURSE_DATA")
+                .missingCourses(ex.getMissingCourses())
+                .incompleteCourses(ex.getIncompleteCourses())
+                .build();
+
+        return ResponseEntity
+                .status(HttpStatus.valueOf(422))
+                .body(ApiResponse.ok(
+                        ex.getMessage() != null
+                                ? ex.getMessage()
+                                : "Insufficient course data for prediction",
+                        details));
     }
 }

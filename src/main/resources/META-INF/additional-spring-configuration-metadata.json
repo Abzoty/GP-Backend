@@ -1,39 +1,52 @@
-{
-  "properties": [
-    {
-      "name": "jwt.secret",
-      "type": "java.lang.String",
-      "description": "Base64-encoded HMAC-SHA256 secret used to sign JWT access tokens. Must be at least 32 bytes (256 bits). Generate with: openssl rand -base64 64"
-    },
-    {
-      "name": "jwt.expiration-ms",
-      "type": "java.lang.Long",
-      "description": "JWT access token lifetime in milliseconds. Default: 900000 (15 minutes)."
-    },
-    {
-      "name": "jwt.refresh-expiration-ms",
-      "type": "java.lang.Long",
-      "description": "Refresh token lifetime in milliseconds. Default: 604800000 (7 days)."
-    },
-    {
-      "name": "ml.service.base-url",
-      "type": "java.lang.String",
-      "description": "Base URL of the Python ML recommendation service called by CourseRecommendationService and DeptRecommendationService."
-    },
-    {
-      "name": "app.frontend-url",
-      "type": "java.lang.String",
-      "description": "Base URL of the React frontend. Used when constructing password-reset links sent via email."
-    },
-    {
-      "name": "reset.token-expiration-ms",
-      "type": "java.lang.Long",
-      "description": "Password reset token lifetime in milliseconds. Default: 900000 (15 minutes)."
-    },
-    {
-      "name": "app.storage.upload-dir",
-      "type": "java.lang.String",
-      "description": "Directory where uploaded material files are stored. Relative to the JVM working directory or an absolute path. Created automatically on startup. Default: 'uploads'."
-    }
-  ]
-}
+{"properties": [
+  {
+    "name": "jwt.secret",
+    "type": "java.lang.String",
+    "description": "Base64-encoded HMAC-SHA256 secret used to sign JWT access tokens. Must be at least 32 bytes (256 bits). Generate with: openssl rand -base64 64"
+  },
+  {
+    "name": "jwt.expiration-ms",
+    "type": "java.lang.Long",
+    "description": "JWT access token lifetime in milliseconds. Default: 900000 (15 minutes)."
+  },
+  {
+    "name": "jwt.refresh-expiration-ms",
+    "type": "java.lang.Long",
+    "description": "Refresh token lifetime in milliseconds. Default: 604800000 (7 days)."
+  },
+  {
+    "name": "ml.service.base-url",
+    "type": "java.lang.String",
+    "description": "Base URL of the Python ML recommendation service called by CourseRecommendationService and DeptRecommendationService."
+  },
+  {
+    "name": "app.frontend-url",
+    "type": "java.lang.String",
+    "description": "Base URL of the React frontend. Used when constructing password-reset links sent via email."
+  },
+  {
+    "name": "reset.token-expiration-ms",
+    "type": "java.lang.Long",
+    "description": "Password reset token lifetime in milliseconds. Default: 900000 (15 minutes)."
+  },
+  {
+    "name": "app.storage.upload-dir",
+    "type": "java.lang.String",
+    "description": "Directory where uploaded material files are stored. Relative to the JVM working directory or an absolute path. Created automatically on startup. Default: 'uploads'."
+  },
+  {
+    "name": "prediction.service.url",
+    "type": "java.lang.String",
+    "description": "A description for 'prediction.service.url'"
+  },
+  {
+    "name": "prediction.service.connect-timeout-ms",
+    "type": "java.lang.String",
+    "description": "A description for 'prediction.service.connect-timeout-ms'"
+  },
+  {
+    "name": "prediction.service.read-timeout-ms",
+    "type": "java.lang.String",
+    "description": "A description for 'prediction.service.read-timeout-ms'"
+  }
+]}
