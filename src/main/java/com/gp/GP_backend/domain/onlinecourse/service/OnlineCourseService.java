@@ -26,6 +26,7 @@ public class OnlineCourseService {
         // 1. Get all course codes the student is registered in
         List<String> registeredCodes = courseRegistrationRepository
             .findByUserIdAndClosedFalse(userId).stream()
+            .filter(c -> c.getClosed() == false)
             .map(CourseRegistration::getCode)
             .filter(code -> code != null && !code.isBlank())
             .distinct()
