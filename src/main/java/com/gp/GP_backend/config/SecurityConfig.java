@@ -1,6 +1,8 @@
 package com.gp.GP_backend.config;
 
+import com.gp.GP_backend.security.JwtAccessDeniedHandler;
 import com.gp.GP_backend.security.JwtAuthFilter;
+import com.gp.GP_backend.security.JwtAuthenticationEntryPoint;
 import com.gp.GP_backend.security.UserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -18,6 +20,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
 
 /**
  * Spring Security configuration for the stateless JWT-based API.
@@ -40,6 +43,8 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final UserDetailsServiceImpl userDetailsService;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -63,7 +68,11 @@ public class SecurityConfig {
                                 "/scalar/**")
                         .permitAll()
                         .anyRequest().authenticated())
-
+                
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(jwtAuthenticationEntryPoint) // Handles 401s (Expired/Missing Token)
+                        .accessDeniedHandler(jwtAccessDeniedHandler) // Handles 403s (Forbidden role access)
+                )
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
