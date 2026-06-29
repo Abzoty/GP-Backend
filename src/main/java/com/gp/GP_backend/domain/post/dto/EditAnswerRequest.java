@@ -7,6 +7,6 @@ import lombok.Data;
 @Data
 public class EditAnswerRequest {
     @NotBlank(message = "Answer body is required")
-    @Size(min = 10, message = "Answer must be at least 10 characters")
+    @Size(min = 3, message = "Answer must be at least 3 characters")
     private String body;
 }

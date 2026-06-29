@@ -9,8 +9,8 @@ import lombok.Data;
  *
  * <p>Validation rules from the acceptance criteria:
  * <ul>
- *   <li>Title: 10–300 characters</li>
- *   <li>Body: minimum 30 characters</li>
+ *   <li>Title: 3–300 characters</li>
+ *   <li>Body: minimum 10 characters</li>
  *   <li>Tags: max 5, each tag max 30 characters</li>
  * </ul>
  */
@@ -18,10 +18,10 @@ import lombok.Data;
 public class CreatePostRequest {
 
     @NotBlank(message = "Title is required")
-    @Size(min = 10, max = 300, message = "Title must be between 10 and 300 characters")
+    @Size(min = 3, max = 300, message = "Title must be between 3 and 300 characters")
     private String title;
 
     @NotBlank(message = "Body is required")
-    @Size(min = 30, message = "Body must be at least 30 characters")
+    @Size(min = 10, message = "Body must be at least 10 characters")
     private String body;
 }
