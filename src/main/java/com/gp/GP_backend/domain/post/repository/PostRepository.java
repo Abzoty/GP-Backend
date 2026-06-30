@@ -13,7 +13,13 @@ import java.util.UUID;
 
 public interface PostRepository extends JpaRepository<Post, UUID> {
 
-    /** Feed sorted by newest first (default). */
+    /**
+     * Feed sorted by newest first (default).
+     * "SpaceId" has no matching scalar field anymore, but Spring Data still
+     * resolves it as a nested property traversal — Post.space.id — so this
+     * derived method name doesn't need to change even though {@code space}
+     * is now a {@code @ManyToOne} association.
+     */
     Page<Post> findBySpaceIdOrderByCreatedAtDesc(UUID spaceId, Pageable pageable);
 
     /** Feed sorted by most "Good Question" marks (top posts view). */
@@ -36,13 +42,13 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
     void decrementGoodQuestionCount(@Param("id") UUID id);
 
     /** Answer count for a single post — used when building PostResponse. */
-    @Query("SELECT COUNT(a) FROM Answer a WHERE a.postId = :postId")
+    @Query("SELECT COUNT(a) FROM Answer a WHERE a.post.id = :postId")
     int countAnswersByPostId(@Param("postId") UUID postId);
 
-    @Query("SELECT p.spaceId FROM Post p WHERE p.id = :postId")
+    @Query("SELECT p.space.id FROM Post p WHERE p.id = :postId")
     UUID findSpaceIdByPostId(@Param("postId") UUID postId);
 
-    @Query("SELECT p.authorId FROM Post p WHERE p.id = :postId")
+    @Query("SELECT p.author.id FROM Post p WHERE p.id = :postId")
     UUID findAuthorIdByPostId(@Param("postId") UUID postId);
 
     @Modifying
@@ -57,33 +63,34 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
     @Query("UPDATE Post p SET p.isSolved = false, p.acceptedAnswerId = null WHERE p.id = :postId")
     int clearSolved(@Param("postId") UUID postId);
 
-    @Query("SELECT s.name FROM Post p JOIN Space s ON p.spaceId = s.id WHERE p.id = :postId")
+    /** Now a direct association traversal — no explicit join needed. */
+    @Query("SELECT p.space.name FROM Post p WHERE p.id = :postId")
     String findSpaceNameByPostId(UUID postId);
 
     /**
      * Counts posts created by a specific user inside a specific space.
      * Used by the space leaderboard to compute per-space post stats.
      */
-    @Query("SELECT COUNT(p) FROM Post p WHERE p.spaceId = :spaceId AND p.authorId = :userId")
+    @Query("SELECT COUNT(p) FROM Post p WHERE p.space.id = :spaceId AND p.author.id = :userId")
     int countBySpaceIdAndAuthorId(@Param("spaceId") UUID spaceId, @Param("userId") UUID userId);
+
     @Query("""
-        SELECT p.authorId, COUNT(p)
-        FROM Post p
-        WHERE p.spaceId = :spaceId
-        GROUP BY p.authorId
-        """)
+            SELECT p.author.id, COUNT(p)
+            FROM Post p
+            WHERE p.space.id = :spaceId
+            GROUP BY p.author.id
+            """)
     List<Object[]> countBySpaceIdGroupByAuthor(@Param("spaceId") UUID spaceId);
 
     /**
      * Searches posts within a space by title or body with an optional solved
-     * filter.
-     * All parameters except {@code spaceId} are optional — passing {@code null}
-     * skips that filter.
-     * Sorting and pagination are driven by the supplied {@link Pageable}.
+     * filter. All parameters except {@code spaceId} are optional — passing
+     * {@code null} skips that filter. Sorting and pagination are driven by
+     * the supplied {@link Pageable}.
      */
     @Query("""
             SELECT p FROM Post p
-            WHERE p.spaceId = :spaceId
+            WHERE p.space.id = :spaceId
             AND (:query IS NULL OR p.title LIKE CONCAT('%', :query, '%')
                 OR p.body LIKE CONCAT('%', :query, '%'))
             AND (:isSolved IS NULL OR p.isSolved = :isSolved)

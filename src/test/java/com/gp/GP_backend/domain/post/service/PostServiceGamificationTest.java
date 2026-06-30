@@ -52,8 +52,8 @@ class PostServiceGamificationTest {
 
     @InjectMocks
     private PostService postService;
-  @Mock
-private NotificationService notificationService;
+    @Mock
+    private NotificationService notificationService;
 
     @Test
     void markQuestionAsSolvedShouldRejectSelfAcceptedAnswer() {
@@ -62,8 +62,8 @@ private NotificationService notificationService;
         UUID authorId = UUID.randomUUID();
         User actor = User.builder().id(authorId).build();
 
-        Post post = Post.builder().id(postId).authorId(authorId).build();
-        Answer answer = Answer.builder().id(answerId).postId(postId).authorId(authorId).build();
+        Post post = Post.builder().id(postId).author(actor).build();
+        Answer answer = Answer.builder().id(answerId).post(post).author(actor).build();
 
         when(postRepository.findById(postId)).thenReturn(Optional.of(post));
         when(answerRepository.findById(answerId)).thenReturn(Optional.of(answer));
@@ -88,9 +88,10 @@ private NotificationService notificationService;
         UUID questionAuthorId = UUID.randomUUID();
         UUID answerAuthorId = UUID.randomUUID();
         User actor = User.builder().id(questionAuthorId).build();
+        User answerAuthor = User.builder().id(answerAuthorId).build();
 
-        Post post = Post.builder().id(postId).authorId(questionAuthorId).build();
-        Answer answer = Answer.builder().id(answerId).postId(postId).authorId(answerAuthorId).build();
+        Post post = Post.builder().id(postId).author(actor).build();
+        Answer answer = Answer.builder().id(answerId).post(post).author(answerAuthor).build();
 
         when(postRepository.findById(postId)).thenReturn(Optional.of(post));
         when(answerRepository.findById(answerId)).thenReturn(Optional.of(answer));

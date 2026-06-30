@@ -54,11 +54,6 @@ import java.util.stream.Collectors;
  * hooks are delegated to
  * {@link com.gp.GP_backend.domain.notification.service.NotificationService}
  * — both run in the same transaction so everything is atomic.
- *
- * <p>
- * Cross-domain data (author name, space membership) is fetched through
- * service/repository interfaces rather than JPA associations, keeping
- * domain packages loosely coupled.
  */
 @Service
 @RequiredArgsConstructor
@@ -81,26 +76,6 @@ public class PostService {
 
         // ─── US-014: Create a question post ───────────────────────────────────────
 
-        /**
-         * Creates a new post (question or discussion) inside a space.
-         *
-         * <p>
-         * Acceptance criteria enforced here:
-         * <ul>
-         * <li>Author must be a member of the target space.</li>
-         * <li>Title 10–300 chars, body min 30 chars — validated by Bean Validation
-         * before this method is called; asserted here for safety.</li>
-         * <li>Max 5 tags.</li>
-         * <li>+10 XP awarded to the author on success.</li>
-         * </ul>
-         *
-         * @param spaceId the space in which the post is created
-         * @param author  the authenticated user (resolved from JWT principal)
-         * @param request validated request body
-         * @return the persisted post mapped to a {@link PostResponse}
-         * @throws ApiException 403 if the author is not a member of the space
-         * @throws ApiException 422 if tag count exceeds 5 (belt-and-suspenders)
-         */
         @Transactional
         public PostResponse createPost(UUID spaceId, User author, CreatePostRequest request) {
 
@@ -112,9 +87,13 @@ public class PostService {
                                         "You must be a member of this space to post");
                 }
 
+                Space space = spaceRepository.findById(spaceId)
+                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                                "Space not found with id: " + spaceId));
+
                 Post post = Post.builder()
-                                .spaceId(spaceId)
-                                .authorId(author.getId())
+                                .space(space)
+                                .author(author)
                                 .title(request.getTitle().trim())
                                 .body(request.getBody())
                                 .createdAt(LocalDateTime.now())
@@ -143,7 +122,7 @@ public class PostService {
                 Post post = postRepository.findById(postId)
                                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                                                 "Post not found with id: " + postId));
-                if (!post.getAuthorId().equals(userId)) {
+                if (!post.getAuthor().getId().equals(userId)) {
                         throw new ApiException(HttpStatus.FORBIDDEN,
                                         "Only the post author can edit it");
                 }
@@ -158,13 +137,13 @@ public class PostService {
                 Post post = postRepository.findById(postId)
                                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                                                 "Post not found with id: " + postId));
-                if (!post.getAuthorId().equals(userId)) {
+                if (!post.getAuthor().getId().equals(userId)) {
                         throw new ApiException(HttpStatus.FORBIDDEN,
                                         "Only the post author can delete it");
                 }
 
                 gamificationService.revokeXp(
-                                post.getAuthorId(),
+                                post.getAuthor().getId(),
                                 XpCalculator.EVENT_POST_CREATED,
                                 postId,
                                 XpCalculator.REF_POST);
@@ -185,29 +164,6 @@ public class PostService {
 
         // ─── US-015: Answer a question ────────────────────────────────────────────
 
-        /**
-         * Submits an answer to an existing post.
-         *
-         * <p>
-         * Acceptance criteria enforced here:
-         * <ul>
-         * <li>The target post must exist.</li>
-         * <li>Author must be a member of the space that owns the post.</li>
-         * <li>Answer body minimum 10 chars — enforced by Bean Validation.</li>
-         * <li>Post's answer count is incremented (via a COUNT query — no
-         * denormalised column needed per the ERD).</li>
-         * <li>+15 XP awarded to the answerer.</li>
-         * <li>A notification is sent to the question author (stubbed until
-         * NotificationService is implemented).</li>
-         * </ul>
-         *
-         * @param postId  the post being answered
-         * @param author  the authenticated user
-         * @param request validated request body
-         * @return the persisted answer mapped to an {@link AnswerResponse}
-         * @throws ApiException 404 if the post does not exist
-         * @throws ApiException 403 if the author is not a member of the post's space
-         */
         @Transactional
         public AnswerResponse createAnswer(UUID postId, User author, CreateAnswerRequest request) {
 
@@ -218,15 +174,15 @@ public class PostService {
 
                 // Guard: author must be a member of the post's space
                 boolean isMember = spaceMembershipRepository
-                                .existsBySpaceIdAndUserId(post.getSpaceId(), author.getId());
+                                .existsBySpaceIdAndUserId(post.getSpace().getId(), author.getId());
                 if (!isMember) {
                         throw new ApiException(HttpStatus.FORBIDDEN,
                                         "You must be a member of this space to answer");
                 }
 
                 Answer answer = Answer.builder()
-                                .postId(postId)
-                                .authorId(author.getId())
+                                .post(post)
+                                .author(author)
                                 .body(request.getBody())
                                 .createdAt(LocalDateTime.now())
                                 .build();
@@ -255,20 +211,20 @@ public class PostService {
                 Post post = postRepository.findById(postId)
                                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                                                 "Post not found with id: " + postId));
-                if (!post.getAuthorId().equals(user.getId())) {
+                if (!post.getAuthor().getId().equals(user.getId())) {
                         throw new ApiException(HttpStatus.FORBIDDEN,
                                         "Only the question author can mark it as solved");
                 }
                 Answer answer = answerRepository.findById(answerId)
                                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                                                 "Answer not found with id: " + answerId));
-                if (!answer.getPostId().equals(postId)) {
+                if (!answer.getPost().getId().equals(postId)) {
                         throw new ApiException(HttpStatus.BAD_REQUEST,
                                         "Answer does not belong to the specified post");
                 }
-                UUID answerAuthorId = answer.getAuthorId();
+                UUID answerAuthorId = answer.getAuthor().getId();
                 // Prevent self-accept farming: you cannot accept your own answer.
-                if (answerAuthorId.equals(post.getAuthorId())) {
+                if (answerAuthorId.equals(post.getAuthor().getId())) {
                         throw new ApiException(HttpStatus.BAD_REQUEST,
                                         "You cannot accept your own answer");
                 }
@@ -282,11 +238,12 @@ public class PostService {
                         if (currentAcceptedId != null) {
                                 Answer oldAccepted = answerRepository.findById(currentAcceptedId)
                                                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
-                                                                "Accepted answer not found with id: " + currentAcceptedId));
+                                                                "Accepted answer not found with id: "
+                                                                                + currentAcceptedId));
 
                                 answerRepository.unmarkAsAccepted(currentAcceptedId);
                                 gamificationService.revokeXp(
-                                                oldAccepted.getAuthorId(),
+                                                oldAccepted.getAuthor().getId(),
                                                 XpCalculator.EVENT_ANSWER_ACCEPTED,
                                                 currentAcceptedId,
                                                 XpCalculator.REF_ANSWER);
@@ -308,7 +265,7 @@ public class PostService {
                         return true;
                 }
 
-                //check the answer already accepted 
+                // check the answer already accepted
                 if (answer.getIsAccepted()) {
                         throw new ApiException(HttpStatus.BAD_REQUEST,
                                         "Answer is already accepted");
@@ -327,7 +284,7 @@ public class PostService {
                                         "Post is already solved");
                 }
 
-                notificationService.notifyAnswerAccepted(answerId);
+                notificationService.notifyAnswerAccepted(answerId, post);
 
                 // Award the answerer for having their answer accepted
                 gamificationService.awardXp(
@@ -345,7 +302,7 @@ public class PostService {
                 Post post = postRepository.findById(postId)
                                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                                                 "Post not found with id: " + postId));
-                if (!post.getAuthorId().equals(user.getId())) {
+                if (!post.getAuthor().getId().equals(user.getId())) {
                         throw new ApiException(HttpStatus.FORBIDDEN,
                                         "Only the question author can unmark it as solved");
                 }
@@ -362,7 +319,7 @@ public class PostService {
 
                         answerRepository.unmarkAsAccepted(acceptedAnswerId);
                         gamificationService.revokeXp(
-                                        accepted.getAuthorId(),
+                                        accepted.getAuthor().getId(),
                                         XpCalculator.EVENT_ANSWER_ACCEPTED,
                                         acceptedAnswerId,
                                         XpCalculator.REF_ANSWER);
@@ -374,11 +331,6 @@ public class PostService {
 
         // ─── Read operations ──────────────────────────────────────────────────────
 
-        /**
-         * Fetches a single post by ID and increments its view counter.
-         *
-         * @throws ApiException 404 if not found
-         */
         @Transactional
         public PostResponse getPost(UUID postId) {
                 Post post = postRepository.findById(postId)
@@ -387,7 +339,7 @@ public class PostService {
 
                 postRepository.incrementViewCount(postId);
 
-                User author = userService.getUserById(post.getAuthorId());
+                User author = userService.getUserById(post.getAuthor().getId());
                 int answerCount = postRepository.countAnswersByPostId(postId);
 
                 return toPostResponse(post, author.getFullName(), answerCount);
@@ -418,17 +370,18 @@ public class PostService {
                                 postId, PageRequest.of(page, size));
 
                 Set<UUID> answerAuthorIds = answers.getContent().stream()
-                                .map(Answer::getAuthorId)
+                                .map(answer -> answer.getAuthor().getId())
                                 .collect(Collectors.toSet());
                 Map<UUID, User> answerAuthors = userRepository.findAllById(answerAuthorIds).stream()
                                 .collect(Collectors.toMap(User::getId, u -> u));
 
                 return answers.stream()
                                 .map(answer -> {
-                                        User author = answerAuthors.get(answer.getAuthorId());
+                                        User author = answerAuthors.get(answer.getAuthor().getId());
                                         if (author == null) {
                                                 throw new ApiException(HttpStatus.NOT_FOUND,
-                                                                "User not found with id: " + answer.getAuthorId());
+                                                                "User not found with id: "
+                                                                                + answer.getAuthor().getId());
                                         }
                                         return toAnswerResponse(answer, author.getFullName());
                                 })
@@ -440,7 +393,7 @@ public class PostService {
                 Answer answer = answerRepository.findById(answerId)
                                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                                                 "Answer not found with id: " + answerId));
-                if (!answer.getAuthorId().equals(userId)) {
+                if (!answer.getAuthor().getId().equals(userId)) {
                         throw new ApiException(HttpStatus.FORBIDDEN,
                                         "Only the answer author can edit it");
                 }
@@ -454,13 +407,13 @@ public class PostService {
                 Answer answer = answerRepository.findById(answerId)
                                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                                                 "Answer not found with id: " + answerId));
-                if (!answer.getAuthorId().equals(userId)) {
+                if (!answer.getAuthor().getId().equals(userId)) {
                         throw new ApiException(HttpStatus.FORBIDDEN,
                                         "Only the answer author can delete it");
                 }
 
                 gamificationService.revokeXp(
-                                answer.getAuthorId(),
+                                answer.getAuthor().getId(),
                                 XpCalculator.EVENT_ANSWER_GIVEN,
                                 answerId,
                                 XpCalculator.REF_ANSWER);
@@ -513,15 +466,12 @@ public class PostService {
 
         // ─── Mapping helpers ──────────────────────────────────────────────────────
 
-        /**
-         * Maps a {@link Post} entity to a {@link PostResponse}.
-         */
         private PostResponse toPostResponse(Post post, String authorName, int answerCount) {
 
                 return PostResponse.builder()
                                 .id(post.getId())
-                                .spaceId(post.getSpaceId())
-                                .authorId(post.getAuthorId())
+                                .spaceId(post.getSpace().getId())
+                                .authorId(post.getAuthor().getId())
                                 .authorName(authorName)
                                 .title(post.getTitle())
                                 .body(post.getBody())
@@ -538,8 +488,8 @@ public class PostService {
         private AnswerResponse toAnswerResponse(Answer answer, String authorName) {
                 return AnswerResponse.builder()
                                 .id(answer.getId())
-                                .postId(answer.getPostId())
-                                .authorId(answer.getAuthorId())
+                                .postId(answer.getPost().getId())
+                                .authorId(answer.getAuthor().getId())
                                 .authorName(authorName)
                                 .body(answer.getBody())
                                 .upvoteCount(answer.getUpvoteCount())
@@ -566,7 +516,7 @@ public class PostService {
                 }
 
                 // 3. Prepare to batch fetch users
-                Set<UUID> userIdsToFetch = posts.stream().map(Post::getAuthorId)
+                Set<UUID> userIdsToFetch = posts.stream().map(post -> post.getAuthor().getId())
                                 .collect(java.util.stream.Collectors.toSet());
 
                 // 4. Fetch top answers per post & collect their authors
@@ -577,7 +527,7 @@ public class PostService {
                                                         pid, PageRequest.of(0, 3))
                                         .getContent();
                         topAnswersMap.put(pid, topAnswers);
-                        topAnswers.forEach(a -> userIdsToFetch.add(a.getAuthorId()));
+                        topAnswers.forEach(a -> userIdsToFetch.add(a.getAuthor().getId()));
                 }
 
                 // 5. Batch fetch all Users (Post authors AND Answer authors at the same time)
@@ -586,15 +536,15 @@ public class PostService {
 
                 // 6. Assemble the DTOs entirely in memory (Lightning fast)
                 return posts.stream().map(post -> {
-                        User author = usersMap.get(post.getAuthorId());
+                        User author = usersMap.get(post.getAuthor().getId());
                         int count = answerCounts.getOrDefault(post.getId(), 0);
                         List<Answer> topAnswers = topAnswersMap.getOrDefault(post.getId(), List.of());
 
                         List<AllPostsResponse.AnswerSummary> answerSummaries = topAnswers.stream().map(ans -> {
-                                User ansAuthor = usersMap.get(ans.getAuthorId());
+                                User ansAuthor = usersMap.get(ans.getAuthor().getId());
                                 return AllPostsResponse.AnswerSummary.builder()
                                                 .answerId(ans.getId())
-                                                .authorId(ans.getAuthorId())
+                                                .authorId(ans.getAuthor().getId())
                                                 .authorName(ansAuthor != null ? ansAuthor.getFullName() : "Unknown")
                                                 .authorAvatarUrl(ansAuthor != null ? ansAuthor.getImageUrl() : null)
                                                 .body(ans.getBody())
@@ -608,7 +558,7 @@ public class PostService {
                                         .postId(post.getId())
                                         .title(post.getTitle())
                                         .body(post.getBody())
-                                        .authorId(author != null ? author.getId() : post.getAuthorId())
+                                        .authorId(author != null ? author.getId() : post.getAuthor().getId())
                                         .authorName(author != null ? author.getFullName() : "Unknown")
                                         .authorAvatarUrl(author != null ? author.getImageUrl() : null)
                                         .spaceId(space.getId())
@@ -626,10 +576,6 @@ public class PostService {
                 }).toList();
         }
 
-        /**
-         * Builds a {@link Sort} from the supplied field name and direction, falling
-         * back to {@code createdAt DESC} for unknown values.
-         */
         private Sort buildSort(String sortBy, String sortDir) {
                 Sort.Direction direction = "asc".equalsIgnoreCase(sortDir)
                                 ? Sort.Direction.ASC
@@ -649,14 +595,14 @@ public class PostService {
                 }
 
                 Set<UUID> answerAuthorIds = topAnswers.stream()
-                                .map(Answer::getAuthorId)
+                                .map(answer -> answer.getAuthor().getId())
                                 .collect(Collectors.toCollection(HashSet::new));
                 Map<UUID, User> answerAuthors = userRepository.findAllById(answerAuthorIds).stream()
                                 .collect(Collectors.toMap(User::getId, u -> u));
 
                 return topAnswers.stream()
                                 .map(answer -> {
-                                        User answerAuthor = answerAuthors.get(answer.getAuthorId());
+                                        User answerAuthor = answerAuthors.get(answer.getAuthor().getId());
                                         if (answerAuthor == null) {
                                                 throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND",
                                                                 "Author not found for answer: " + answer.getId());
@@ -664,7 +610,7 @@ public class PostService {
 
                                         return AllPostsResponse.AnswerSummary.builder()
                                                         .answerId(answer.getId())
-                                                        .authorId(answer.getAuthorId())
+                                                        .authorId(answer.getAuthor().getId())
                                                         .authorName(answerAuthor.getFullName())
                                                         .authorAvatarUrl(answerAuthor.getImageUrl())
                                                         .body(answer.getBody())

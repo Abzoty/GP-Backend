@@ -1,5 +1,7 @@
 package com.gp.GP_backend.domain.post.entity;
 
+import com.gp.GP_backend.domain.space.entity.Space;
+import com.gp.GP_backend.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -12,8 +14,10 @@ import java.util.UUID;
  * Represents a question or discussion post inside a Space.
  *
  * <p>
- * Primary key uses Hibernate's UUID strategy (generated before INSERT),
- * consistent with the rest of the project's entities.
+ * {@code space} and {@code author} are real JPA {@code @ManyToOne}
+ * associations (rather than bare UUID columns) so the FK relationships to
+ * {@code spaces} and {@code users} actually show up in the generated
+ * schema/ERD and Hibernate can enforce referential integrity.
  *
  * <p>
  * Tags are stored as a comma-separated string in a single column
@@ -37,15 +41,15 @@ public class Post {
         @Column(columnDefinition = "UNIQUEIDENTIFIER", updatable = false, nullable = false)
         private UUID id;
 
-        /**
-         * FK → spaces.id — not a JPA association to keep cross-domain coupling minimal.
-         */
-        @Column(name = "space_id", nullable = false, columnDefinition = "UNIQUEIDENTIFIER")
-        private UUID spaceId;
+        /** FK → spaces.id */
+        @ManyToOne(fetch = FetchType.LAZY)
+        @JoinColumn(name = "space_id", nullable = false)
+        private Space space;
 
         /** FK → users.id */
-        @Column(name = "author_id", nullable = false, columnDefinition = "UNIQUEIDENTIFIER")
-        private UUID authorId;
+        @ManyToOne(fetch = FetchType.LAZY)
+        @JoinColumn(name = "author_id", nullable = false)
+        private User author;
 
         @Column(nullable = false, length = 300)
         private String title;

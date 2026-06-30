@@ -14,6 +14,7 @@ import com.gp.GP_backend.domain.post.entity.VoteType;
 import com.gp.GP_backend.domain.notification.service.NotificationService;
 import com.gp.GP_backend.domain.post.entity.TargetType;
 import com.gp.GP_backend.domain.post.entity.Answer;
+import com.gp.GP_backend.domain.post.entity.Post;
 import com.gp.GP_backend.domain.post.repository.AnswerRepository;
 import com.gp.GP_backend.domain.post.repository.PostRepository;
 import com.gp.GP_backend.domain.space.entity.Space;
@@ -25,14 +26,11 @@ import com.gp.GP_backend.shared.exception.ApiException;
 import org.springframework.dao.DataIntegrityViolationException;
 import com.gp.GP_backend.shared.util.XpCalculator;
 
-//import jakarta.transaction.Transactional;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Handles upvoting of answers and "good question" votes on posts.
-*/
-
-
+ */
 @Service
 @RequiredArgsConstructor
 public class VoteService {
@@ -74,14 +72,11 @@ public class VoteService {
                                 .voteType(VoteType.GOOD_QUESTION)
                                 .createdAt(LocalDateTime.now())
                                 .build();
-                
 
                 try {
-                         Vote savedVote = voteRepository.save(newVote);
+                        Vote savedVote = voteRepository.save(newVote);
                         notificationService.notifyGoodQuestionMarked(postId, user);
                         // Award the post's author, not the voter.
-                        // Use the vote ID as reference to allow multiple users to vote
-                        // on the same post while still being idempotent per vote.
                         gamificationService.awardXp(
                                         authorId,
                                         XpCalculator.EVENT_GOOD_QUESTION,
@@ -95,10 +90,10 @@ public class VoteService {
         }
 
         @Transactional
-        public boolean upvoteGoodAnswer(UUID answerId, User user){
+        public boolean upvoteGoodAnswer(UUID answerId, User user) {
                 Answer answer = answerRepository.findById(answerId)
                                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Answer not found"));
-                UUID postId = answer.getPostId();
+                UUID postId = answer.getPost().getId();
                 UUID spaceId = postRepository.findSpaceIdByPostId(postId);
                 Space space = spaceRepository.findById(spaceId)
                                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Space not found"));
@@ -111,7 +106,7 @@ public class VoteService {
                         throw new ApiException(HttpStatus.FORBIDDEN,
                                         "User must be a member of the space to vote");
                 }
-                UUID authorId = answer.getAuthorId();
+                UUID authorId = answer.getAuthor().getId();
                 if (authorId.equals(user.getId())) {
                         throw new ApiException(HttpStatus.BAD_REQUEST,
                                         "Author cannot vote on their own answer");
@@ -127,15 +122,11 @@ public class VoteService {
                                 .voteType(VoteType.UPVOTE)
                                 .createdAt(LocalDateTime.now())
                                 .build();
-               
-                
 
                 try {
                         Vote savedVote = voteRepository.save(newVote);
                         notificationService.notifyUpvoteAnswerReceived(answerId, user);
                         // Award the answer's author, not the voter.
-                        // Use the vote ID as reference to allow multiple users to upvote
-                        // the same answer while still being idempotent per vote.
                         gamificationService.awardXp(
                                         authorId,
                                         XpCalculator.EVENT_ANSWER_UPVOTED,
@@ -188,7 +179,7 @@ public class VoteService {
         public boolean removeUpvote(UUID answerId, User user) {
                 Answer answer = answerRepository.findById(answerId)
                                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Answer not found"));
-                UUID postId = answer.getPostId();
+                UUID postId = answer.getPost().getId();
                 UUID spaceId = postRepository.findSpaceIdByPostId(postId);
                 Space space = spaceRepository.findById(spaceId)
                                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Space not found"));
@@ -211,7 +202,7 @@ public class VoteService {
 
                 answerRepository.decrementUpvoteCount(answerId);
 
-                UUID authorId = answer.getAuthorId();
+                UUID authorId = answer.getAuthor().getId();
                 gamificationService.revokeXp(
                                 authorId,
                                 XpCalculator.EVENT_ANSWER_UPVOTED,

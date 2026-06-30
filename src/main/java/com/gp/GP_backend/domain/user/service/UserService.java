@@ -1,9 +1,11 @@
 package com.gp.GP_backend.domain.user.service;
 
+import com.gp.GP_backend.domain.notification.entity.NotificationPreference;
 import com.gp.GP_backend.domain.user.dto.RegisterRequest;
 import com.gp.GP_backend.domain.user.dto.UpdateProfileRequest;
 import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.domain.user.repository.UserRepository;
+import com.gp.GP_backend.domain.notification.repository.NotificationPreferencesRepository;
 import com.gp.GP_backend.shared.exception.ApiException;
 import com.gp.GP_backend.shared.util.EmailService;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +34,7 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final NotificationPreferencesRepository notificationPreferencesRepository;
     private final PasswordEncoder passwordEncoder;
     private final ModelMapper modelMapper;
     private final EmailService emailService;
@@ -84,11 +87,20 @@ public class UserService {
             log.warn("Welcome email failed for user {}", saved.getId(), ex);
         }
 
+        NotificationPreference preference = NotificationPreference.builder()
+                .user(user)
+                .inApp(true)
+                .email(true)
+                .build();
+
+        notificationPreferencesRepository.save(preference);
+
         return saved;
     }
 
     /**
-     * update the user profile using the applyPatch method to account for partial updates.
+     * update the user profile using the applyPatch method to account for partial
+     * updates.
      */
     @Transactional
     public User updateProfile(UUID userId, UpdateProfileRequest request) {

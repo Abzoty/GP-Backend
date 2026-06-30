@@ -21,9 +21,9 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
                         UUID userId);
 
         Optional<Vote> findByTargetIdAndTargetTypeAndUserId(
-                UUID targetId,
-                TargetType targetType,
-                UUID userId);
+                        UUID targetId,
+                        TargetType targetType,
+                        UUID userId);
 
         @Modifying
         @Transactional
@@ -34,8 +34,13 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
 
         /**
          * Deletes all votes cast on any answer that belongs to the given post.
-         * Used during post deletion to clean up answer-level votes before the answers
-         * themselves are removed.
+         * Used during post deletion to clean up answer-level votes before the
+         * answers themselves are removed.
+         *
+         * NOTE: {@code targetId} on Vote stays a bare UUID — it's a polymorphic
+         * "generic FK" that can point at either a Post or an Answer depending on
+         * {@code targetType}, so it can't be modeled as a single typed
+         * association.
          */
         @Transactional
         @Modifying
@@ -45,7 +50,7 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
                         AND EXISTS (
                             SELECT 1 FROM Answer a
                             WHERE a.id = v.targetId
-                            AND a.postId = :postId
+                            AND a.post.id = :postId
                         )
                         """)
         void deleteVotesByPostAnswers(UUID postId);

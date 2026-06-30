@@ -62,8 +62,9 @@ public class NotificationService {
     }
 
     public void notifyNewPostCreated(Post post, User author) {
-        String spaceName = spaceRepository.findNameById(post.getSpaceId());
-        List<UUID> memberIds = spaceMembershipRepository.findMembersIdsBySpaceId(post.getSpaceId());
+        UUID spaceId = post.getSpace().getId();
+        String spaceName = spaceRepository.findNameById(spaceId);
+        List<UUID> memberIds = spaceMembershipRepository.findMembersIdsBySpaceId(spaceId);
         
         String title = "New post in your space " + spaceName;
         String body = "A new post has been created by " + author.getFullName() + " in " + spaceName + ". Check it out!";
@@ -125,7 +126,7 @@ public class NotificationService {
 
     public void notifyUpvoteAnswerReceived(UUID answerId, User voter) {
         Answer answer = answerRepository.findById(answerId).orElseThrow();
-        User recipient = userRepository.findById(answer.getAuthorId()).orElseThrow();
+        User recipient = userRepository.findById(answer.getAuthor().getId()).orElseThrow();
         if (!acceptsInApp(recipient.getId())) return;
         String title = "Your answer got an upvote!";
         String body = voter.getFullName() + " upvoted your answer: \"" + answer.getBody().substring(0, Math.min(50, answer.getBody().length())) + "...\"";
@@ -148,7 +149,7 @@ public class NotificationService {
 
     public void notifyGoodQuestionMarked(UUID postId, User marker) {
         Post post = postRepository.findById(postId).orElseThrow();
-        User recipient = userRepository.findById(post.getAuthorId()).orElseThrow();
+        User recipient = userRepository.findById(post.getAuthor().getId()).orElseThrow();
         if (!acceptsInApp(recipient.getId())) return;
         String title = "Good Question!";
         String body = marker.getFullName() + " marked your question: \"" + post.getTitle() + "\" as a Good Question!";
@@ -170,7 +171,7 @@ public class NotificationService {
 
 
     public void notifyNewAnswer(Post post, Answer answer, User answerer) {
-        User recipient = userRepository.findById(post.getAuthorId()).orElseThrow();
+        User recipient = userRepository.findById(post.getAuthor().getId()).orElseThrow();
         String title = "New answer to your question!";
         String body = answerer.getFullName() + " answered your question: \"" + post.getTitle() + "\". Check it out!";
 
@@ -182,7 +183,7 @@ public class NotificationService {
                     .title(title)
                     .message(body)
                     .referenceType(ReferenceType.NEW_ANSWER.name())
-                    .referenceId(answer.getId())
+                    .referenceId(post.getId())
                     .notificationType(NotificationType.IN_APP_AND_EMAIL.name())
                     .isRead(false)
                     .createdAt(LocalDateTime.now())
@@ -202,9 +203,9 @@ public class NotificationService {
     }
 
 
-    public void notifyAnswerAccepted(UUID answerId) {
+    public void notifyAnswerAccepted(UUID answerId, Post post) {
         Answer answer = answerRepository.findById(answerId).orElseThrow();
-        User recipient = userRepository.findById(answer.getAuthorId()).orElseThrow();
+        User recipient = userRepository.findById(answer.getAuthor().getId()).orElseThrow();
         String title = "Your answer was accepted!";
         String body = "Congratulations! Your answer: \"" + answer.getBody().substring(0, Math.min(50, answer.getBody().length())) + "...\" was accepted as the solution.";
 
@@ -217,7 +218,7 @@ public class NotificationService {
                     .title(title)
                     .message(body)
                     .referenceType(ReferenceType.ANSWER_ACCEPTED.name())
-                    .referenceId(answer.getId())
+                    .referenceId(post.getId())
                     .notificationType(NotificationType.IN_APP_AND_EMAIL.name())
                     .isRead(false)
                     .createdAt(LocalDateTime.now())

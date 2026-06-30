@@ -1,5 +1,6 @@
 package com.gp.GP_backend.domain.space.repository;
 
+import com.gp.GP_backend.domain.space.entity.Space;
 import com.gp.GP_backend.domain.space.entity.SpaceMembership;
 
 import org.springframework.data.jpa.repository.EntityGraph;

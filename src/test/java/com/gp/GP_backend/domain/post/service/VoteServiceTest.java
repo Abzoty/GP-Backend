@@ -2,6 +2,7 @@ package com.gp.GP_backend.domain.post.service;
 
 import com.gp.GP_backend.domain.notification.service.NotificationService;
 import com.gp.GP_backend.domain.post.entity.Answer;
+import com.gp.GP_backend.domain.post.entity.Post;
 import com.gp.GP_backend.domain.post.entity.TargetType;
 import com.gp.GP_backend.domain.post.repository.AnswerRepository;
 import com.gp.GP_backend.domain.post.repository.PostRepository;
@@ -70,7 +71,7 @@ class VoteServiceTest {
         when(spaceMembershipRepository.existsBySpaceIdAndUserId(spaceId, voter.getId())).thenReturn(true);
         when(postRepository.findAuthorIdByPostId(postId)).thenReturn(authorId);
         when(voteRepository.existsByTargetIdAndTargetTypeAndUserId(postId, TargetType.QUESTION, voter.getId()))
-            .thenReturn(false);
+                .thenReturn(false);
         when(voteRepository.save(any())).thenAnswer(invocation -> {
             com.gp.GP_backend.domain.post.entity.Vote vote = invocation.getArgument(0);
             vote.setId(UUID.randomUUID());
@@ -178,7 +179,9 @@ class VoteServiceTest {
         UUID spaceId = UUID.randomUUID();
         UUID authorId = UUID.randomUUID();
 
-        Answer answer = Answer.builder().id(answerId).postId(postId).authorId(authorId).build();
+        Post post = Post.builder().id(postId).build();
+        User author = User.builder().id(authorId).build();
+        Answer answer = Answer.builder().id(answerId).post(post).author(author).build();
 
         when(answerRepository.findById(answerId)).thenReturn(Optional.of(answer));
         when(postRepository.findSpaceIdByPostId(postId)).thenReturn(spaceId);
@@ -206,7 +209,9 @@ class VoteServiceTest {
         UUID postId = UUID.randomUUID();
         UUID spaceId = UUID.randomUUID();
 
-        Answer answer = Answer.builder().id(answerId).postId(postId).authorId(UUID.randomUUID()).build();
+        Post post = Post.builder().id(postId).build();
+        Answer answer = Answer.builder().id(answerId).post(post)
+                .author(User.builder().id(UUID.randomUUID()).build()).build();
 
         when(answerRepository.findById(answerId)).thenReturn(Optional.of(answer));
         when(postRepository.findSpaceIdByPostId(postId)).thenReturn(spaceId);
@@ -228,7 +233,9 @@ class VoteServiceTest {
         UUID postId = UUID.randomUUID();
         UUID spaceId = UUID.randomUUID();
 
-        Answer answer = Answer.builder().id(answerId).postId(postId).authorId(UUID.randomUUID()).build();
+        Post post = Post.builder().id(postId).build();
+        Answer answer = Answer.builder().id(answerId).post(post)
+                .author(User.builder().id(UUID.randomUUID()).build()).build();
 
         when(answerRepository.findById(answerId)).thenReturn(Optional.of(answer));
         when(postRepository.findSpaceIdByPostId(postId)).thenReturn(spaceId);
@@ -250,7 +257,9 @@ class VoteServiceTest {
         UUID postId = UUID.randomUUID();
         UUID spaceId = UUID.randomUUID();
 
-        Answer answer = Answer.builder().id(answerId).postId(postId).authorId(UUID.randomUUID()).build();
+        Post post = Post.builder().id(postId).build();
+        Answer answer = Answer.builder().id(answerId).post(post)
+                .author(User.builder().id(UUID.randomUUID()).build()).build();
 
         when(answerRepository.findById(answerId)).thenReturn(Optional.of(answer));
         when(postRepository.findSpaceIdByPostId(postId)).thenReturn(spaceId);
@@ -269,7 +278,8 @@ class VoteServiceTest {
         UUID postId = UUID.randomUUID();
         UUID spaceId = UUID.randomUUID();
 
-        Answer answer = Answer.builder().id(answerId).postId(postId).authorId(voter.getId()).build();
+        Post post = Post.builder().id(postId).build();
+        Answer answer = Answer.builder().id(answerId).post(post).author(voter).build();
 
         when(answerRepository.findById(answerId)).thenReturn(Optional.of(answer));
         when(postRepository.findSpaceIdByPostId(postId)).thenReturn(spaceId);
