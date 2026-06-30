@@ -23,10 +23,12 @@ import com.gp.GP_backend.domain.user.repository.UserRepository;
 import com.gp.GP_backend.shared.util.XpCalculator;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import jakarta.persistence.EntityManager;
 import java.util.UUID;
@@ -35,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @ActiveProfiles("test")
 class CompleteCycleIntegrationTest {
 
@@ -68,7 +70,8 @@ class CompleteCycleIntegrationTest {
 
     @Autowired
     private EntityManager entityManager;
-    
+    @Mock
+    private HandlerExceptionResolver handlerExceptionResolver;
 
     @Test
     @Transactional
@@ -85,12 +88,15 @@ class CompleteCycleIntegrationTest {
         boolean solved = postService.markQuestionAsSolved(createdPost.getId(), createdAnswer.getId(), questionAuthor);
         assertTrue(solved);
 
-        // markAsAccepted/markAsSolved are bulk updates; clear persistence context to avoid stale reads.
+        // markAsAccepted/markAsSolved are bulk updates; clear persistence context to
+        // avoid stale reads.
         entityManager.flush();
         entityManager.clear();
 
-        GamificationProfile authorProfile = gamificationProfileRepository.findByUserId(questionAuthor.getId()).orElseThrow();
-        GamificationProfile answererProfile = gamificationProfileRepository.findByUserId(answerAuthor.getId()).orElseThrow();
+        GamificationProfile authorProfile = gamificationProfileRepository.findByUserId(questionAuthor.getId())
+                .orElseThrow();
+        GamificationProfile answererProfile = gamificationProfileRepository.findByUserId(answerAuthor.getId())
+                .orElseThrow();
 
         assertEquals(1, authorProfile.getTotalPosts());
         assertEquals(XpCalculator.XP_POST_CREATED, authorProfile.getXpPoints());
@@ -125,7 +131,8 @@ class CompleteCycleIntegrationTest {
 
         materialService.bookmark(materialId, otherUser);
 
-        // linkCount is updated via bulk UPDATE; clear persistence context to avoid stale reads.
+        // linkCount is updated via bulk UPDATE; clear persistence context to avoid
+        // stale reads.
         entityManager.flush();
         entityManager.clear();
 
