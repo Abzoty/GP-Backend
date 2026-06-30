@@ -262,127 +262,156 @@ class GamificationServiceTest {
     // revokeXp
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // @Test
-    // void revokeXp_shouldDeductXpAndSaveNegativeTransaction() {
-    //     UUID userId = UUID.randomUUID();
-    //     UUID refId   = UUID.randomUUID();
-    //     GamificationProfile profile = profile(userId);
-    //     profile.setXpPoints(50);
-    //     profile.setLevel(XpCalculator.calculateLevel(50));
-    //     profile.setTotalPosts(2);
+    @Test
+    void revokeXp_shouldDeductXpAndDeleteTransaction() {
+        UUID userId = UUID.randomUUID();
+        UUID refId = UUID.randomUUID();
+        GamificationProfile profile = profile(userId);
+        profile.setXpPoints(50);
+        profile.setLevel(XpCalculator.calculateLevel(50));
+        profile.setTotalPosts(2);
 
-    //     when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
-    //     when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
-    //     when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-    //     when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        XpTransaction tx = XpTransaction.builder()
+                .xpDelta(XpCalculator.XP_POST_CREATED)
+                .eventType(XpCalculator.EVENT_POST_CREATED)
+                .referenceId(refId)
+                .referenceType(XpCalculator.REF_POST)
+                .build();
 
-    //     gamificationService.revokeXp(
-    //             userId,
-    //             XpCalculator.EVENT_POST_CREATED,
-    //             XpCalculator.XP_POST_CREATED,
-    //             refId,
-    //             XpCalculator.REF_POST);
+        when(xpTransactionRepository.findByEventKey(anyString())).thenReturn(Optional.of(tx));
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
+        when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-    //     assertEquals(50 - XpCalculator.XP_POST_CREATED, profile.getXpPoints());
-    //     assertEquals(Integer.valueOf(1), profile.getTotalPosts());
+        gamificationService.revokeXp(
+                userId,
+                XpCalculator.EVENT_POST_CREATED,
+                refId,
+                XpCalculator.REF_POST);
 
-    //     ArgumentCaptor<XpTransaction> txCaptor = ArgumentCaptor.forClass(XpTransaction.class);
-    //     verify(xpTransactionRepository).save(txCaptor.capture());
-    //     assertTrue(txCaptor.getValue().getXpDelta() < 0,
-    //             "Revocation transaction must have a negative xpDelta");
-    //     assertTrue(txCaptor.getValue().getEventType().endsWith("_REVOKED"),
-    //             "Revocation transaction eventType must end with _REVOKED");
-    //     assertEquals(refId, txCaptor.getValue().getReferenceId());
-    // }
+        assertEquals(50 - XpCalculator.XP_POST_CREATED, profile.getXpPoints());
+        assertEquals(Integer.valueOf(1), profile.getTotalPosts());
 
-    // @Test
-    // void revokeXp_shouldClampAtZeroAndNotGoNegative() {
-    //     UUID userId = UUID.randomUUID();
-    //     GamificationProfile profile = profile(userId);
-    //     profile.setXpPoints(5); // less than one award's worth
+        verify(xpTransactionRepository).delete(tx);
+    }
 
-    //     when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
-    //     when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
-    //     when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-    //     when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+    @Test
+    void revokeXp_shouldClampAtZeroAndNotGoNegative() {
+        UUID userId = UUID.randomUUID();
+        UUID refId = UUID.randomUUID();
+        GamificationProfile profile = profile(userId);
+        profile.setXpPoints(5);
 
-    //     // Revoke more XP than the user has
-    //     gamificationService.revokeXp(
-    //             userId,
-    //             XpCalculator.EVENT_POST_CREATED,
-    //             XpCalculator.XP_POST_CREATED, // e.g. 10 > 5
-    //             UUID.randomUUID(),
-    //             XpCalculator.REF_POST);
+        XpTransaction tx = XpTransaction.builder()
+                .xpDelta(XpCalculator.XP_POST_CREATED)
+                .eventType(XpCalculator.EVENT_POST_CREATED)
+                .referenceId(refId)
+                .referenceType(XpCalculator.REF_POST)
+                .build();
 
-    //     assertEquals(Integer.valueOf(0), profile.getXpPoints(),
-    //             "XP must never go below zero");
-    // }
+        when(xpTransactionRepository.findByEventKey(anyString())).thenReturn(Optional.of(tx));
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
+        when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-    // @Test
-    // void revokeXp_shouldDecrementAnswerCounter() {
-    //     UUID userId = UUID.randomUUID();
-    //     GamificationProfile profile = profile(userId);
-    //     profile.setXpPoints(50);
-    //     profile.setTotalAnswers(3);
+        gamificationService.revokeXp(
+                userId,
+                XpCalculator.EVENT_POST_CREATED,
+                refId,
+                XpCalculator.REF_POST);
 
-    //     when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
-    //     when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
-    //     when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-    //     when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        assertEquals(Integer.valueOf(0), profile.getXpPoints(),
+                "XP must never go below zero");
+        verify(xpTransactionRepository).delete(tx);
+    }
 
-    //     gamificationService.revokeXp(userId, XpCalculator.EVENT_ANSWER_GIVEN,
-    //             XpCalculator.XP_ANSWER_GIVEN, UUID.randomUUID(), XpCalculator.REF_ANSWER);
+    @Test
+    void revokeXp_shouldDecrementAnswerCounter() {
+        UUID userId = UUID.randomUUID();
+        UUID refId = UUID.randomUUID();
+        GamificationProfile profile = profile(userId);
+        profile.setXpPoints(50);
+        profile.setTotalAnswers(3);
 
-    //     assertEquals(Integer.valueOf(2), profile.getTotalAnswers());
-    //     assertEquals(Integer.valueOf(0), profile.getTotalPosts()); // untouched
-    // }
+        XpTransaction tx = XpTransaction.builder()
+                .xpDelta(XpCalculator.XP_ANSWER_GIVEN)
+                .eventType(XpCalculator.EVENT_ANSWER_GIVEN)
+                .referenceId(refId)
+                .referenceType(XpCalculator.REF_ANSWER)
+                .build();
 
-    // @Test
-    // void revokeXp_shouldDecrementMaterialCounter() {
-    //     UUID userId = UUID.randomUUID();
-    //     GamificationProfile profile = profile(userId);
-    //     profile.setXpPoints(50);
-    //     profile.setTotalMaterialsShared(2);
+        when(xpTransactionRepository.findByEventKey(anyString())).thenReturn(Optional.of(tx));
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
+        when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-    //     when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
-    //     when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
-    //     when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-    //     when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        gamificationService.revokeXp(userId, XpCalculator.EVENT_ANSWER_GIVEN, refId, XpCalculator.REF_ANSWER);
 
-    //     gamificationService.revokeXp(userId, XpCalculator.EVENT_MATERIAL_SHARED,
-    //             XpCalculator.XP_MATERIAL_SHARED, UUID.randomUUID(), XpCalculator.REF_MATERIAL);
+        assertEquals(Integer.valueOf(2), profile.getTotalAnswers());
+        assertEquals(Integer.valueOf(0), profile.getTotalPosts());
+        verify(xpTransactionRepository).delete(tx);
+    }
 
-    //     assertEquals(Integer.valueOf(1), profile.getTotalMaterialsShared());
-    // }
+    @Test
+    void revokeXp_shouldDecrementMaterialCounter() {
+        UUID userId = UUID.randomUUID();
+        UUID refId = UUID.randomUUID();
+        GamificationProfile profile = profile(userId);
+        profile.setXpPoints(50);
+        profile.setTotalMaterialsShared(2);
 
-    // @Test
-    // void revokeXp_counterShouldNotGoBelowZero() {
-    //     UUID userId = UUID.randomUUID();
-    //     GamificationProfile profile = profile(userId);
-    //     profile.setXpPoints(50);
-    //     profile.setTotalPosts(0); // already at zero
+        XpTransaction tx = XpTransaction.builder()
+                .xpDelta(XpCalculator.XP_MATERIAL_SHARED)
+                .eventType(XpCalculator.EVENT_MATERIAL_SHARED)
+                .referenceId(refId)
+                .referenceType(XpCalculator.REF_MATERIAL)
+                .build();
 
-    //     when(gamificationProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
-    //     when(userRepository.getReferenceById(userId)).thenReturn(User.builder().id(userId).build());
-    //     when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-    //     when(xpTransactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(xpTransactionRepository.findByEventKey(anyString())).thenReturn(Optional.of(tx));
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
+        when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-    //     gamificationService.revokeXp(userId, XpCalculator.EVENT_POST_CREATED,
-    //             XpCalculator.XP_POST_CREATED, UUID.randomUUID(), XpCalculator.REF_POST);
+        gamificationService.revokeXp(userId, XpCalculator.EVENT_MATERIAL_SHARED, refId, XpCalculator.REF_MATERIAL);
 
-    //     assertEquals(Integer.valueOf(0), profile.getTotalPosts(),
-    //             "Counter must never go below zero");
-    // }
+        assertEquals(Integer.valueOf(1), profile.getTotalMaterialsShared());
+        verify(xpTransactionRepository).delete(tx);
+    }
 
-    // @Test
-    // void revokeXp_shouldRejectNonPositiveDelta() {
-    //     UUID userId = UUID.randomUUID();
+    @Test
+    void revokeXp_counterShouldNotGoBelowZero() {
+        UUID userId = UUID.randomUUID();
+        UUID refId = UUID.randomUUID();
+        GamificationProfile profile = profile(userId);
+        profile.setXpPoints(50);
+        profile.setTotalPosts(0);
 
-    //     ApiException ex = assertThrows(ApiException.class, () ->
-    //             gamificationService.revokeXp(userId, XpCalculator.EVENT_POST_CREATED, 0,
-    //                     UUID.randomUUID(), XpCalculator.REF_POST));
+        XpTransaction tx = XpTransaction.builder()
+                .xpDelta(XpCalculator.XP_POST_CREATED)
+                .eventType(XpCalculator.EVENT_POST_CREATED)
+                .referenceId(refId)
+                .referenceType(XpCalculator.REF_POST)
+                .build();
 
-    //     assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        when(xpTransactionRepository.findByEventKey(anyString())).thenReturn(Optional.of(tx));
+        when(gamificationProfileRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(profile));
+        when(gamificationProfileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        gamificationService.revokeXp(userId, XpCalculator.EVENT_POST_CREATED, refId, XpCalculator.REF_POST);
+
+        assertEquals(Integer.valueOf(0), profile.getTotalPosts(),
+                "Counter must never go below zero");
+        verify(xpTransactionRepository).delete(tx);
+    }
+
+    @Test
+    void revokeXp_shouldBeIdempotentWhenTransactionDoesNotExist() {
+        UUID userId = UUID.randomUUID();
+        UUID refId = UUID.randomUUID();
+
+        when(xpTransactionRepository.findByEventKey(anyString())).thenReturn(Optional.empty());
+
+        gamificationService.revokeXp(userId, XpCalculator.EVENT_POST_CREATED, refId, XpCalculator.REF_POST);
+
+        verify(gamificationProfileRepository, never()).findByUserIdForUpdate(any());
+        verify(xpTransactionRepository, never()).delete(any());
+    }    //     assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
     // }
 
     // ═══════════════════════════════════════════════════════════════════════════

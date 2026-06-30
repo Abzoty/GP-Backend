@@ -91,29 +91,46 @@ src/
 │   │   ├── GpBackendApplication.java
 │   │   ├── config/
 │   │   │   ├── CorsConfig.java
+│   │   │   ├── JacksonConfig.java
 │   │   │   ├── ModelMapperConfig.java
 │   │   │   ├── OpenApiConfig.java
 │   │   │   ├── SecurityConfig.java
 │   │   │   └── WebClientConfig.java
 │   │   ├── domain/
-│   │   │   ├── user/
+│   │   │   ├── course/
 │   │   │   │   ├── controller/
 │   │   │   │   ├── dto/
 │   │   │   │   ├── entity/
 │   │   │   │   ├── repository/
 │   │   │   │   └── service/
-│   │   │   ├── space/
+│   │   │   ├── material/
+│   │   │   ├── notification/
+│   │   │   ├── onlinecourse/
 │   │   │   │   ├── controller/
 │   │   │   │   ├── dto/
 │   │   │   │   ├── entity/
 │   │   │   │   ├── repository/
 │   │   │   │   └── service/
 │   │   │   ├── post/
-│   │   │   ├── material/
-│   │   │   ├── notification/
-│   │   │   └── recommendation/
+│   │   │   ├── prediction/
+│   │   │   │   ├── controller/
+│   │   │   │   ├── dto/
+│   │   │   │   ├── exception/
+│   │   │   │   └── service/
+│   │   │   ├── questionnaire/
+│   │   │   │   ├── controller/
+│   │   │   │   ├── dto/
+│   │   │   │   └── service/
+│   │   │   ├── recommendation/
+│   │   │   ├── referencedata/
+│   │   │   │   ├── controller/
+│   │   │   │   └── service/
+│   │   │   ├── space/
+│   │   │   └── user/
 │   │   ├── security/
+│   │   │   ├── JwtAccessDeniedHandler.java
 │   │   │   ├── JwtAuthFilter.java
+│   │   │   ├── JwtAuthenticationEntryPoint.java
 │   │   │   ├── JwtTokenProvider.java
 │   │   │   └── UserDetailsServiceImpl.java
 │   │   └── shared/
@@ -126,7 +143,11 @@ src/
 │       ├── application.properties
 │       ├── application-dev.properties
 │       ├── application-prod.properties
-│       └── database-init.sql
+│       ├── database-init.sql
+│       └── reference-data/
+│           ├── course-catalog.json
+│           ├── grade-mapping.json
+│           └── questionnaire.json
 └── test/
     ├── java/com/gp/GP_backend/
     │   ├── GpBackendApplicationTests.java
@@ -181,7 +202,7 @@ flowchart LR
 
 ### 5.1 User and Authentication
 
-This module handles account lifecycle, login, profile updates, password management, course registrations, and gamification-facing user state.
+This module handles account lifecycle, login, profile updates, password management, and gamification-facing user state.
 
 Main responsibilities:
 
@@ -191,14 +212,12 @@ Main responsibilities:
 - logout,
 - password reset,
 - profile read/update,
-- course registration CRUD,
 - gamification profile and leaderboard readouts.
 
 #### Main controllers
 
 - `/api/v1/auth`
 - `/api/v1/users`
-- `/api/v1/courses`
 - `/api/v1/gamification`
 
 #### Important services
@@ -206,7 +225,6 @@ Main responsibilities:
 - `UserService`: registration and profile management.
 - `RefreshTokenService`: refresh token creation, rotation, revocation.
 - `PasswordResetService`: forgot-password and change-password flows.
-- `CourseRegistrationService`: course history management.
 - `GamificationService`: XP and leaderboard logic.
 
 ### 5.2 Spaces
@@ -288,19 +306,94 @@ Main responsibilities:
 
 ### 5.6 Recommendations
 
-This module now has one implemented production flow and two planned ML-backed flows.
+This module handles space recommendations by combining multiple academic and social signals.
 
 Current state:
 
-- personalized space recommendations are implemented in `SpaceRecommendationService`,
-- the active endpoint returns ranked spaces using course match, social graph, and text similarity signals,
-- the course and department ML services are scaffolded and still depend on the external Python service,
-- the `RestClient` bean is configured for future ML calls.
+- Personalized space recommendations are implemented in `SpaceRecommendationService`.
+- The active endpoint returns ranked spaces using course match, social graph, and text similarity signals.
+- It recommends spaces that align with user courses or active communities.
 
 #### Main controller
 
 - `/api/v1/recommendations/spaces`
-- `/api/v1/recommendations`
+
+### 5.7 Course Registration
+
+This module manages user course history, tracking academic year, semester, grades, and active registrations.
+
+Main responsibilities:
+
+- Register course mappings with grades and academic status.
+- Enforce constraints to prevent duplicate course registrations for the same semester.
+- List active or historical registrations.
+- Validate course codes and credits.
+
+#### Main controller
+
+- `/api/v1/courses`
+
+#### Important services
+
+- `CourseRegistrationService`: Coordinates CRUD operations for student registration.
+- `CourseValidationService`: Validates course entries.
+
+### 5.8 Online Courses
+
+This module fetches online course suggestions from external providers (Coursera, edX, Udemy, etc.) based on the user's current course registrations.
+
+Main responsibilities:
+
+- Match online course details to standard university course codes.
+- Return list of recommended online courses complete with ratings, score, reviews, and provider URL.
+
+#### Main controller
+
+- `/api/v1/online-courses`
+
+#### Important services
+
+- `OnlineCourseService`: Logic to query and score relevant online courses for the user's active courses.
+
+### 5.9 Prediction
+
+This module coordinates ML predictions, specifically predicting the most suitable department for a student based on their course grades.
+
+Main responsibilities:
+
+- Orchestrate calls to the Python ML service client.
+- Format course grades into request payloads for the predictive model.
+- Handle exceptions when course data is insufficient to run department predictions.
+
+#### Main controller
+
+- `/api/v1/predictions`
+
+#### Important services
+
+- `PredictionOrchestrationService`: Prepares student grades and coordinates recommendation queries.
+- `PredictionServiceClient`: Handles HTTP requests to the external Python ML service.
+
+### 5.10 Questionnaire & Reference Data
+
+This module serves static reference lookups (like course catalogs and grading scales) and handles student questionnaires.
+
+Main responsibilities:
+
+- Expose the system-wide static course catalog and grading mapping.
+- Load the department-selection questionnaire JSON file.
+- Grade questionnaire choices to produce department affinity scores/probabilities.
+
+#### Main controllers
+
+- `/api/v1/questionnaire`
+- `/api/v1/reference-data`
+
+#### Important services
+
+- `ReferenceDataService`: Loads and caches static JSON mapping catalogs.
+- `QuestionnaireService`: Reads and exposes the raw questionnaire configurations.
+- `QuestionnaireScoringService`: Evaluates answers to score department suitability.
 
 ## 6. API Surface
 
@@ -328,7 +421,7 @@ Current state:
 | DELETE | `/api/v1/courses/{id}` | Remove a registration |
 | GET | `/api/v1/courses/{id}` | Read one registration |
 | GET | `/api/v1/courses/current` | List active registrations |
-| GET | `/api/v1/courses/all` | List all registrations |
+| GET | `/api/v1/courses` | List all registrations (both current and closed) |
 
 ### Gamification endpoints
 
@@ -394,13 +487,17 @@ Main capabilities:
 | PUT | `/api/v1/notifications/toggle-email` | Toggle email notifications |
 | PUT | `/api/v1/notifications/toggle-inapp` | Toggle in-app notifications |
 
-### Recommendation endpoints
+### Recommendation, Prediction, and Static Data endpoints
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/v1/recommendations/spaces` | Return personalized space recommendations |
-| Planned | `/api/v1/recommendations/courses` | Personalized course suggestions |
-| Planned | `/api/v1/recommendations/department` | Department prediction |
+| GET | `/api/v1/online-courses` | Get online course recommendations based on active registered courses |
+| POST | `/api/v1/predictions/department` | Predict the most suitable department (returns 422 if course data is insufficient) |
+| GET | `/api/v1/questionnaire` | Retrieve the raw department affinity questionnaire config |
+| POST | `/api/v1/questionnaire/score` | Score questionnaire answers to yield department probabilities |
+| GET | `/api/v1/reference-data/courses` | Get the master course catalog |
+| GET | `/api/v1/reference-data/grades` | Get the reference grade mapping configurations |
 
 ## 7. Business Logic and Request Flow
 
@@ -442,15 +539,18 @@ This is a strong defense against refresh token replay and token theft.
 - Leaving decrements member count, but the sole admin cannot leave until another admin exists.
 - Admin promotion is explicit and only allowed for existing members.
 
-### Recommendation lifecycle
+### Recommendation and Prediction lifecycle
 
-- Space recommendations blend three independent signals:
-  - course-code overlap with the user's current registrations,
-  - friends-of-friends space overlap from existing memberships,
-  - Jaccard text similarity against spaces the user already belongs to.
-- Recommendations are ranked first by how many signals selected the space, then by combined score.
-- Each recommendation includes the recommended `Space`, a `methodCount`, a numeric `score`, and a set of `reasons`.
-- Course and department recommendation services are still placeholders for the external Python ML service.
+- **Space Recommendations**:
+  - Space recommendations blend three independent signals: course-code overlap with the user's current registrations, friends-of-friends space overlap from existing memberships, and Jaccard text similarity against spaces the user already belongs to.
+  - Recommendations are ranked first by how many signals selected the space, then by combined score.
+  - Each recommendation includes the recommended `Space`, a `methodCount`, a numeric `score`, and a set of `reasons`.
+- **Online Course Recommendations**:
+  - Suggested online courses are matched dynamically in the service by mapping the user's currently registered course codes to online courses stored in the database.
+- **Department Prediction**:
+  - Graded and completed courses for the student are fetched.
+  - The orchestrator formats the course histories and delegates prediction calculations via `PredictionServiceClient` to the Python ML service.
+  - If course data is insufficient, the system throws an `InsufficientCourseDataException` resulting in a `422 Unprocessable Entity` response returning missing and incomplete courses.
 
 ### Post and answer lifecycle
 
@@ -523,12 +623,13 @@ The project uses SQL Server in development and production-oriented schemas. Most
 | `spaces` | Community containers | Many-to-one to `users` through creator |
 | `space_memberships` | User membership and role in a space | Many-to-one to `users` and `spaces` |
 | `posts` | Questions and discussions | References `spaces` and `users` by UUID columns |
-| `answers` | Answers to posts | References `posts` and `users` by UUID columns |
+| `answers` | Answers to answers | References `posts` and `users` by UUID columns |
 | `votes` | Good-question votes and answer upvotes | References `users`; target is polymorphic |
 | `materials` | Shared files and links | Many-to-one to `spaces` and `users` |
 | `material_links` | Bookmark table | Many-to-one to `materials` and `users` |
 | `notifications` | In-app notification records | Many-to-one to `users` |
 | `notification_preferences` | In-app / email preference flags | Many-to-one to `users` |
+| `online_courses` | Static scraped course suggestions from online providers | Indexed by course code (retrieved based on matching registrations) |
 
 ### Important design choices
 
@@ -549,7 +650,9 @@ The `database-init.sql` file documents the core SQL Server schema. In developmen
 
 - JWT access tokens are signed with a Base64 HMAC secret.
 - The access token contains the user email as the subject and the user UUID as an extra claim.
-- A custom `OncePerRequestFilter` extracts `Authorization: Bearer <token>` and populates the Spring Security context.
+- A custom `OncePerRequestFilter` (`JwtAuthFilter`) extracts `Authorization: Bearer <token>` and populates the Spring Security context.
+- Unauthenticated access attempts to protected resources are rejected cleanly with HTTP 401 via `JwtAuthenticationEntryPoint`.
+- Authorized but disallowed access attempts are rejected with HTTP 403 via `JwtAccessDeniedHandler`.
 
 ### Authorization
 
@@ -689,7 +792,7 @@ The README notes the expected local startup sequence and the Swagger URL.
 
 The repository is functional, but a few areas are still incomplete or need attention from maintainers:
 
-- Space recommendations are implemented, but the ML-backed course and department recommendation services are still scaffolded.
+- Space recommendations, online course recommendations, and department prediction are fully implemented. Department prediction communicates with the external Python ML service.
 - The notification controller currently mirrors the base path in each method mapping, which likely produces duplicated route prefixes.
 - Some notification flows are implemented in service code, but controller route naming should be reviewed before production exposure.
 - Production configuration is intentionally minimal and still needs environment-variable based secret management.
