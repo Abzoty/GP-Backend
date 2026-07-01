@@ -1,5 +1,5 @@
 package com.gp.GP_backend.domain.user.service;
-
+import com.gp.GP_backend.domain.notification.repository.NotificationPreferencesRepository;
 import com.gp.GP_backend.domain.user.dto.RegisterRequest;
 import com.gp.GP_backend.domain.user.dto.UpdateProfileRequest;
 import com.gp.GP_backend.domain.user.entity.User;
@@ -30,6 +30,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 public class UserServiceTest {
+    @Mock
+    private NotificationPreferencesRepository notificationPreferencesRepository;
 
     @Mock
     private UserRepository userRepository;
