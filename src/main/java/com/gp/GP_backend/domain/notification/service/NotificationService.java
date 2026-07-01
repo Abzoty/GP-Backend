@@ -113,7 +113,7 @@ public class NotificationService {
                         .title(title)
                         .message(body)
                         .referenceType(ReferenceType.NEW_MATERIAL.name())
-                        .referenceId(materialId)
+                        .referenceId(newMaterial.getSpace().getId())
                         .notificationType(NotificationType.IN_APP.name())
                         .isRead(false)
                         .createdAt(LocalDateTime.now())
@@ -127,6 +127,7 @@ public class NotificationService {
     public void notifyUpvoteAnswerReceived(UUID answerId, User voter) {
         Answer answer = answerRepository.findById(answerId).orElseThrow();
         User recipient = userRepository.findById(answer.getAuthor().getId()).orElseThrow();
+        
         if (!acceptsInApp(recipient.getId())) return;
         String title = "Your answer got an upvote!";
         String body = voter.getFullName() + " upvoted your answer: \"" + answer.getBody().substring(0, Math.min(50, answer.getBody().length())) + "...\"";
@@ -138,7 +139,7 @@ public class NotificationService {
                 .title(title)
                 .message(body)
                 .referenceType(ReferenceType.UPVOTE.name())
-                .referenceId(answer.getId())
+                .referenceId(answer.getPost().getId())
                 .notificationType(NotificationType.IN_APP.name())
                 .isRead(false)
                 .createdAt(LocalDateTime.now())
