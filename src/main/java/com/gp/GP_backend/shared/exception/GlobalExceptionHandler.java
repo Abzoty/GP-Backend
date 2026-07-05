@@ -14,6 +14,7 @@ import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 
 import java.util.stream.Collectors;
@@ -118,6 +119,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleIntegrityViolation(DataIntegrityViolationException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.fail("Request conflicts with existing data."));
+    }
+
+    /**
+     * Handles multipart file uploads that exceed the configured size limit
+     * (spring.servlet.multipart.max-file-size / max-request-size).
+     * Returns 413 PAYLOAD TOO LARGE with a readable explanation.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+        String message = "The uploaded file is too large. Maximum allowed size is 10 MB.";
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(ApiResponse.fail(message));
     }
 
 

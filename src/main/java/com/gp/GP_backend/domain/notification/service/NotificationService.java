@@ -113,7 +113,7 @@ public class NotificationService {
                         .title(title)
                         .message(body)
                         .referenceType(ReferenceType.NEW_MATERIAL.name())
-                        .referenceId(newMaterial.getSpace().getId())
+                        .referenceId(newMaterial.getId())
                         .notificationType(NotificationType.IN_APP.name())
                         .isRead(false)
                         .createdAt(LocalDateTime.now())
