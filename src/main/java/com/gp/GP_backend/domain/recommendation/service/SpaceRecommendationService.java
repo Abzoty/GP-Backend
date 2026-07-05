@@ -259,6 +259,7 @@ public class SpaceRecommendationService {
                 .map(CourseRegistration::getCode)
                 .filter(Objects::nonNull)
                 .map(String::trim)
+                .map(code -> code.toUpperCase(Locale.ROOT))
                 .filter(code -> !code.isBlank())
                 .distinct()
                 .toList();

@@ -736,7 +736,7 @@ The backend converts validation and business exceptions into controlled HTTP res
 
 ## 12. Testing Strategy
 
-The repository has a healthy mix of smoke, integration, and service-level tests.
+The repository already has a good baseline of smoke, integration, and service-level tests. The next step is to extend coverage into the under-tested modules and verify user actions, business rules, and failure behavior rather than only implementation paths.
 
 ### Test stack
 
@@ -747,11 +747,25 @@ The repository has a healthy mix of smoke, integration, and service-level tests.
 - H2 for a self-contained test database.
 - JaCoCo for coverage reports.
 
-### Test categories observed
+### Current coverage map
 
 - Application context smoke test.
 - Integration test for the full space-post-answer-material flow.
-- Unit tests for post voting, material management, space behavior, password reset, refresh tokens, gamification, and validation.
+- Unit tests for post voting, material management, space behavior, password reset, refresh tokens, gamification, validation, and global exception mapping.
+
+### Under-tested modules to implement next
+
+- Recommendation: verify candidate collection, source deduplication, Python ranking merge, ordering, and empty-result behavior.
+- Prediction: verify questionnaire normalization, model fallback, score combination, and insufficient-data handling.
+- Online course: verify course-code filtering, ordering, and DTO mapping.
+- Course registration: verify create/update/delete flows, duplicate rejection, grade recomputation, and ownership checks.
+- Security and scheduled jobs: verify auth boundaries and token cleanup behavior.
+
+### Verification rules
+
+- Every new module test should assert observable behavior: returned DTOs, repository interactions, error status, and side effects.
+- Negative-path coverage is required for each business rule that rejects invalid input or unauthorized access.
+- Controller tests should verify request handling and response shape; service tests should verify state changes and rule enforcement.
 
 ### Test profile behavior
 
