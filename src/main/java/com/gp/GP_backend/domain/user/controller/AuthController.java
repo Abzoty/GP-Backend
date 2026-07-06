@@ -22,18 +22,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-/**
- * Handles user registration, login, token refresh, logout, and password-reset
- * operations.
- *
- * <p>
- * All endpoints under {@code /api/v1/auth} are public (no JWT required).
- * See {@link com.gp.GP_backend.config.SecurityConfig} for the permit-list.
- *
- * <p>
- * Validation failures and business-logic exceptions are handled centrally by
- * {@link com.gp.GP_backend.shared.exception.GlobalExceptionHandler}.
- */
+
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
@@ -48,10 +37,6 @@ public class AuthController {
         private final ModelMapper modelMapper;
         private final GamificationService gamificationService;
 
-        /**
-         * Registers a new user account.
-         * Returns 201 CREATED with a minimal confirmation payload.
-         */
         @PostMapping("/register")
         public ResponseEntity<ApiResponse<RegisterResponse>> register(
                         @Valid @RequestBody RegisterRequest request) {
@@ -68,10 +53,7 @@ public class AuthController {
                                 .body(ApiResponse.ok("Registration successful", body));
         }
 
-        /**
-         * Authenticates the user and returns a JWT access token and refresh token.
-         * Spring Security's {@link AuthenticationManager} validates the credentials.
-         */
+
         @PostMapping("/login")
         public ResponseEntity<ApiResponse<AuthResponse>> login(
                         @Valid @RequestBody LoginRequest request) {
@@ -91,23 +73,16 @@ public class AuthController {
                                 .user(modelMapper.map(user, UserResponse.class))
                                 .build();
 
-
-                        //  Fix — isolate gamification from the auth result
-                        try {
+                try {
                         gamificationService.trackDailyLogin(user.getId());
-                        } catch (Exception ex) {
+                } catch (Exception ex) {
                         log.warn("Gamification tracking failed ...", user.getId(), ex.getMessage());
-                        }
+                }
 
                 return ResponseEntity.ok(ApiResponse.ok("Login successful", body));
         }
 
-        /**
-         * Exchanges a valid refresh token for a new access token and a rotated refresh
-         * token.
-         * The old token is invalidated on use; presenting a used token triggers full
-         * session revocation.
-         */
+        
         @PostMapping("/refresh")
         public ResponseEntity<ApiResponse<AuthResponse>> refresh(
                         @Valid @RequestBody RefreshRequest request) {
@@ -125,11 +100,7 @@ public class AuthController {
                 return ResponseEntity.ok(ApiResponse.ok("Token refreshed", body));
         }
 
-        /**
-         * Revokes all refresh tokens for the authenticated user (logout from every
-         * device).
-         * Existing JWTs remain valid until they expire naturally (~15 minutes).
-         */
+
         @PostMapping("/logout-all")
         public ResponseEntity<ApiResponse<Void>> logoutAll(
                         @AuthenticationPrincipal User currentUser) {
@@ -138,33 +109,18 @@ public class AuthController {
                 return ResponseEntity.ok(ApiResponse.ok("Logged out from all devices", null));
         }
 
-        // ─── Password reset ───────────────────────────────────────────────────────
 
-        /**
-         * Initiates the forgot-password flow by sending a reset link to the given
-         * email.
-         *
-         * <p>
-         * <b>Always returns 200</b> regardless of whether the email is registered.
-         * This intentional ambiguity prevents user-enumeration attacks — callers
-         * cannot tell from the response whether an account exists.
-         */
         @PostMapping("/forgot-password")
         public ResponseEntity<ApiResponse<Void>> forgotPassword(
                         @Valid @RequestBody ForgotPasswordRequest request) {
 
-                // Runs silently — no exception is surfaced even for unknown emails
                 passwordResetService.initiateForgotPassword(request.getEmail());
 
                 return ResponseEntity.ok(
                                 ApiResponse.ok("If that email is registered, a reset link has been sent", null));
         }
 
-        /**
-         * Validates the reset token and applies the new password.
-         * The token is single-use and expires 15 minutes after issuance.
-         * All active sessions are revoked on success.
-         */
+
         @PostMapping("/reset-password")
         public ResponseEntity<ApiResponse<Void>> resetPassword(
                         @Valid @RequestBody ResetPasswordRequest request) {

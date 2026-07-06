@@ -13,7 +13,6 @@ public class UpdateSpaceRequest {
     @Size(max = 1000)
     private String description;
 
-    /** Changing the category does not re-trigger the similarity check. */
     private SpaceCategory category;
 
     @Size(max = 30)

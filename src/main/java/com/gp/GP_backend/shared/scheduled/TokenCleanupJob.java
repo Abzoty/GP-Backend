@@ -10,22 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 
-/**
- * Nightly scheduled job that purges stale tokens from the database.
- *
- * <p>
- * Two token tables are cleaned:
- * <ul>
- * <li>{@code refresh_tokens} — removes expired or revoked session tokens.</li>
- * <li>{@code password_reset_tokens} — removes expired or already-used reset
- * tokens.</li>
- * </ul>
- *
- * <p>
- * Runs at 3 AM daily (server time) when load is minimal.
- * The cron expression {@code "0 0 3 * * *"}: second=0, minute=0, hour=3,
- * any day-of-month, any month, any day-of-week.
- */
+
 @Component
 @RequiredArgsConstructor
 @Slf4j

@@ -7,20 +7,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Repository for {@link XpTransaction} entities.
- *
- * <p>
- * XpTransaction records are <em>append-only</em> — they are never updated,
- * only created and (if ever) deleted via cascade when the owning user is
- * removed.
- */
+
 public interface XpTransactionRepository extends JpaRepository<XpTransaction, UUID> {
 
-    /** Full XP history for a user, newest first. */
     List<XpTransaction> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
-    /** Fast dedup check for idempotent XP writes. */
     boolean existsByEventKey(String eventKey);
+    
     Optional<XpTransaction> findByEventKey(String eventKey);
 }

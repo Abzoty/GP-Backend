@@ -23,12 +23,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
 
-
-
-/**
- * REST controller for Notification endpoints.
- * All endpoints here are protected by JWT (configured in SecurityConfig).
- */
 @RestController
 @RequestMapping("/api/v1/notifications")
 @RequiredArgsConstructor

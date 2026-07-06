@@ -7,12 +7,12 @@ import java.util.List;
 public class InsufficientCourseDataException extends RuntimeException {
 
     private final List<String> missingCourses;
-    private final List<String> incompleteCourses; // <-- Changed to List<String>
+    private final List<String> incompleteCourses;
 
     public InsufficientCourseDataException(
             String message,
             List<String> missingCourses,
-            List<String> incompleteCourses) { // <-- Changed parameter type
+            List<String> incompleteCourses) {
         super(message);
         this.missingCourses = missingCourses != null ? missingCourses : List.of();
         this.incompleteCourses = incompleteCourses != null ? incompleteCourses : List.of();

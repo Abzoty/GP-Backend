@@ -7,13 +7,6 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * The {@code category} field is an enum ({@link SpaceCategory}) that also
- * drives the duplicate-detection logic during creation:
- * {@link SpaceCategory#COLLEGE_COURSE} spaces are matched by
- * {@code courseCode};
- * all other categories use text-similarity on {@code name + description}.
- */
 @Entity
 @Table(name = "spaces", indexes = {
         @Index(name = "idx_spaces_active_category", columnList = "is_active, category"),
@@ -35,10 +28,6 @@ public class Space {
     @Column(nullable = false, unique = true, length = 100)
     private String name;
 
-    /**
-     * URL-safe version of the name (e.g. "data-structures-cs301").
-     * Generated via {@link com.gp.GP_backend.shared.util.SlugUtil}.
-     */
     @Column(nullable = false, unique = true, length = 120)
     private String slug;
 

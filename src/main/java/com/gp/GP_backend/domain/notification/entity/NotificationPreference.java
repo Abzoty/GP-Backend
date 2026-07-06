@@ -7,10 +7,8 @@ import com.gp.GP_backend.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 
-
 @Entity
-@Table(name = "notification_preferences",
-       uniqueConstraints = @UniqueConstraint(columnNames = {"user_id"}))
+@Table(name = "notification_preferences", uniqueConstraints = @UniqueConstraint(columnNames = { "user_id" }))
 @Getter
 @Setter
 @NoArgsConstructor

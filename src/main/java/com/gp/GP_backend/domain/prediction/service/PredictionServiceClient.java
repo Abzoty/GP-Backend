@@ -54,7 +54,6 @@ public class PredictionServiceClient {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(request)
                                 .retrieve()
-                                // ── THE FIX: Compare the integer value (422) ──
                                 .onStatus(
                                                 status -> status.value() == 422,
                                                 (req, resp) -> {
@@ -69,9 +68,7 @@ public class PredictionServiceClient {
                                                                 throw new InsufficientCourseDataException(
                                                                                 error.getMessage(),
                                                                                 error.getMissingCourses(),
-                                                                                error.getIncompleteCourses()); // Now
-                                                                                                               // passes
-                                                                                                               // List<String>
+                                                                                error.getIncompleteCourses());
 
                                                         } catch (IOException e) {
                                                                 log.error("Failed to parse 422 error response from Python service",

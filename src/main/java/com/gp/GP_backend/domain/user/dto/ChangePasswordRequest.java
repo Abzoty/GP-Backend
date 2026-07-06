@@ -5,17 +5,10 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-/**
- * Payload for {@code POST /api/v1/users/change-password} (authenticated users
- * only).
- */
+
 @Data
 public class ChangePasswordRequest {
 
-    /**
-     * Must match the user's current BCrypt-hashed password — prevents JWT-theft
-     * lockouts.
-     */
     @NotBlank(message = "Current password is required")
     private String currentPassword;
 

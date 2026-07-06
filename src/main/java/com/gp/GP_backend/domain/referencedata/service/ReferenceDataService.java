@@ -14,16 +14,6 @@ import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * Manages reference data: course catalog, grade mappings
- *
- * Loads JSON from classpath at startup, validates uniqueness, and provides:
- * - lookup/resolution methods used internally by other services
- * - raw, file-shaped accessors that expose each JSON file's full content
- * for the reference-data API endpoints
- *
- * @since 1.0
- */
 @Service
 @Slf4j
 public class ReferenceDataService {

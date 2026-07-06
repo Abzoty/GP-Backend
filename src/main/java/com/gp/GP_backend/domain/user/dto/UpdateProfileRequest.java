@@ -5,10 +5,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-/**
- * Payload for {@code PATCH /api/v1/users/profile}.
- * All fields are optional — only non-null fields will be applied.
- */
+
 @Data
 public class UpdateProfileRequest {
 

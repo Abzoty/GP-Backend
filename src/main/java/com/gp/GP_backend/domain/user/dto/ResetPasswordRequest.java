@@ -5,11 +5,9 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-/** Payload for {@code POST /api/v1/auth/reset-password}. */
 @Data
 public class ResetPasswordRequest {
 
-    /** The raw token extracted from the reset link sent to the user's email. */
     @NotBlank(message = "Reset token is required")
     private String token;
 

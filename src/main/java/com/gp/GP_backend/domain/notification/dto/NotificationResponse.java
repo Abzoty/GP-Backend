@@ -9,7 +9,6 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/** Read-only notification sent to the client. */
 @Getter
 @Setter
 @NoArgsConstructor

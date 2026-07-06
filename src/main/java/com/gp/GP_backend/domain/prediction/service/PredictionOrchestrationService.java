@@ -22,9 +22,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * Orchestrates the full department-prediction pipeline.
- */
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -35,8 +33,6 @@ public class PredictionOrchestrationService {
         private static final int SCORE_SCALE = 4;
 
         // ── Department Name Mapping ────────────────────────────────────────────────
-        // Maps abbreviations to their canonical full names to prevent duplicates
-        // when combining questionnaire scores and ML model probabilities.
         private static final Map<String, String> DEPARTMENT_NAME_MAP = Map.of(
                         "CS", "Computer Science",
                         "IS", "Information Systems",
@@ -49,9 +45,6 @@ public class PredictionOrchestrationService {
 
         // ──────────────────────────────────────────────────────────────────────────
 
-        /**
-         * Run the prediction pipeline.
-         */
         public PredictionResponse predict(User user, PredictionRequest request) {
                 log.info("Starting prediction pipeline for user={}", user.getId());
 
@@ -88,7 +81,6 @@ public class PredictionOrchestrationService {
                 BigDecimal mWeight = modelAvailable ? MODEL_WEIGHT : BigDecimal.ZERO;
 
                 // ── Step 5: Build per-department score list ───────────────────────────
-                // Now that both maps use full names, the Set will naturally prevent duplicates.
                 Set<String> allDepartments = new LinkedHashSet<>(questionnaireScores.keySet());
                 if (modelAvailable) {
                         allDepartments.addAll(modelScores.keySet());

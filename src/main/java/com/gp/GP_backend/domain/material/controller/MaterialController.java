@@ -204,23 +204,6 @@ public class MaterialController {
 
     // ─── Search ───────────────────────────────────────────────────────────────
 
-    /**
-     * Searches materials within a space by title or description, with optional
-     * resource-type filter and configurable sort.
-     *
-     * <p>
-     * Caller must be a member of the space.
-     *
-     * @param spaceId      the space to search within.
-     * @param query        substring matched against title and description.
-     * @param resourceType filter by type: {@code "PDF"}, {@code "DOCX"},
-     *                     {@code "TXT"}, {@code "MD"}, {@code "DOC"},
-     *                     or {@code "LINK"}.
-     * @param sortBy       {@code "linkCount"} or {@code "createdAt"} (default).
-     * @param sortDir      {@code "asc"} or {@code "desc"} (default).
-     * @param page         zero-based page index (default 0).
-     * @param size         page size (default 20).
-     */
     @GetMapping("/space/{spaceId}/search")
     @Operation(summary = "Search materials in a space by title/description with optional type filter and sort")
     public ResponseEntity<ApiResponse<List<MaterialResponse>>> searchMaterials(

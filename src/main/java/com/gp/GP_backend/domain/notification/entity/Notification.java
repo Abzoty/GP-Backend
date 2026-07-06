@@ -7,17 +7,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * An in-app notification delivered to a user.
- *
- * <p>
- * Notifications can be system-generated (sender = null) or triggered by
- * another user's action (e.g. "Alice answered your question").
- *
- * <p>
- * {@code referenceType} + {@code referenceId} form a polymorphic link to
- * the entity that caused the notification (a Post, Answer, Material, or Space).
- */
+
 @Entity
 @Table(name = "notifications")
 @Getter
@@ -39,7 +29,7 @@ public class Notification {
 
     /**
      * The user whose action triggered this notification.
-     * Null for system notifications (e.g. "You levelled up!").
+     * Null for system notifications.
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "sender_id")
@@ -48,8 +38,7 @@ public class Notification {
     /**
      * Machine-readable type used by the frontend to decide which icon/template to
      * render.
-     * Examples: {@code NEW_ANSWER}, {@code ANSWER_ACCEPTED},
-     * {@code UPVOTE_RECEIVED}.
+     * Examples: NEW_ANSWER, ANSWER_ACCEPTED, UPVOTE_RECEIVED.
      */
     @Column(name = "notification_type", nullable = false, length = 50)
     private String notificationType;
@@ -61,8 +50,8 @@ public class Notification {
     private String message;
 
     /**
-     * Discriminator for {@code referenceId}.
-     * Values: {@code POST}, {@code ANSWER}, {@code MATERIAL}, {@code SPACE}.
+     * Discriminator for referenceId.
+     * Values: POST, ANSWER, MATERIAL, SPACE.
      */
     @Column(name = "reference_type", length = 30)
     private String referenceType;

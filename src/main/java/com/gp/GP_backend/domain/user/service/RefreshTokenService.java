@@ -14,36 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Manages refresh token lifecycle with family-based rotation.
- *
- * <p>
- * <b>Rotation strategy (RFC 6749 / OAuth 2.0 best practice):</b>
- * <ol>
- * <li>On login: Revoke all existing tokens for the user. Issue a new token in a
- * new family.</li>
- * <li>On refresh: Mark the old token as revoked. Issue a new token in the
- * <em>same</em> family.</li>
- * <li>On reuse: If a revoked token is presented, revoke the <em>entire
- * family</em> and reject
- * the request — this indicates a stolen token is being replayed.</li>
- * </ol>
- *
- * <p>
- * <b>Transaction design — why {@link TokenFamilyRevoker} is a separate
- * bean:</b>
- * Spring {@code @Transactional} works through proxies. When a method calls
- * another method
- * on <em>the same object</em> ({@code this.someMethod()}), it bypasses the
- * proxy entirely,
- * meaning {@code @Transactional} annotations on the called method are silently
- * ignored.
- * To guarantee the family revocation commits independently (before the 401
- * exception
- * triggers a rollback of this method's transaction), the revocation lives in
- * {@link TokenFamilyRevoker} — a separate bean with its own proxy and
- * {@code Propagation.REQUIRES_NEW}.
- */
+
 @Service
 @RequiredArgsConstructor
 public class RefreshTokenService {
@@ -56,10 +27,6 @@ public class RefreshTokenService {
 
     private final RefreshTokenRepository refreshTokenRepository;
 
-    /**
-     * Injected as a separate bean so that its {@code REQUIRES_NEW} transaction
-     * propagation is honoured by Spring's proxy. See class-level Javadoc.
-     */
     private final TokenFamilyRevoker tokenFamilyRevoker;
 
     @PostConstruct
@@ -74,12 +41,7 @@ public class RefreshTokenService {
         }
     }
 
-    /**
-     * Issues a brand-new refresh token for a user after login.
-     * All previous tokens for this user are revoked first to enforce single-session
-     * semantics.
-     * A new {@code familyId} is generated to start a fresh rotation chain.
-     */
+
     @Transactional
     public RefreshToken createRefreshToken(User user) {
         // Revoke all old tokens before issuing a new one (prevents session
@@ -98,31 +60,12 @@ public class RefreshTokenService {
         return refreshTokenRepository.save(token);
     }
 
-    /**
-     * Rotates the refresh token: validates the old one, revokes it, and issues a
-     * new one
-     * within the same family.
-     *
-     * <p>
-     * If the token is already revoked (reuse detected), delegates to
-     * {@link TokenFamilyRevoker#revokeFamily(String)}, which runs in its own
-     * independent transaction and commits immediately before this method throws
-     * 401.
-     * This guarantees the entire family is locked in the DB even though this
-     * method's own transaction will be rolled back by the exception.
-     *
-     * @throws ApiException 401 if the token is unknown, already used, or expired.
-     */
     @Transactional
     public RefreshToken rotateRefreshToken(String oldTokenValue) {
         RefreshToken oldToken = refreshTokenRepository.findByTokenForUpdate(oldTokenValue)
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Invalid refresh token"));
 
-        // Reuse detected — a token that was already consumed is being presented again.
-        // This likely means a stolen token is being replayed by an attacker.
         if (oldToken.isRevoked()) {
-            // Calls through TokenFamilyRevoker's proxy → REQUIRES_NEW transaction
-            // commits independently → not rolled back when we throw below.
             tokenFamilyRevoker.revokeFamily(oldToken.getFamilyId());
             throw new ApiException(HttpStatus.UNAUTHORIZED,
                     "Refresh token reuse detected. All sessions have been invalidated. Please log in again.");
@@ -148,13 +91,6 @@ public class RefreshTokenService {
         return refreshTokenRepository.save(newToken);
     }
 
-    /**
-     * Revokes a specific refresh token (single-device logout).
-     * Validates that the token belongs to {@code currentUser} to prevent cross-user
-     * revocation.
-     *
-     * @throws ApiException 401 if token is invalid or doesn't belong to the user.
-     */
     @Transactional
     public void revokeTokenForUser(String tokenValue, User currentUser) {
         RefreshToken token = refreshTokenRepository.findByTokenForUpdate(tokenValue)
@@ -168,10 +104,7 @@ public class RefreshTokenService {
         refreshTokenRepository.save(token);
     }
 
-    /**
-     * Revokes ALL refresh tokens for a user (logout from all devices).
-     * The user must re-authenticate on every device after this call.
-     */
+
     @Transactional
     public void revokeAllUserTokens(User user) {
         refreshTokenRepository.revokeAllByUser(user);

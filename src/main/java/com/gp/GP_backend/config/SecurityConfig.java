@@ -22,20 +22,6 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 
-/**
- * Spring Security configuration for the stateless JWT-based API.
- *
- * <p>
- * Key decisions:
- * <ul>
- * <li><b>STATELESS sessions:</b> No HTTP session is created; every request must
- * carry a JWT.</li>
- * <li><b>CSRF disabled:</b> Safe for a stateless API — no session cookies to
- * exploit.</li>
- * <li><b>CORS:</b> Delegated to the {@link CorsConfig} bean via
- * {@code Customizer.withDefaults()}.</li>
- * </ul>
- */
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -79,10 +65,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /**
-     * Wires our {@link UserDetailsServiceImpl} and BCrypt encoder into the
-     * DAO-based authentication provider used by {@link AuthenticationManager}.
-     */
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
@@ -90,18 +72,12 @@ public class SecurityConfig {
         return provider;
     }
 
-    /**
-     * Exposes the {@link AuthenticationManager} as a bean so {@link
-     * com.gp.GP_backend.domain.user.controller.AuthController} can inject it
-     * to manually authenticate login requests.
-     */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
             throws Exception {
         return config.getAuthenticationManager();
     }
 
-    /** BCrypt password encoder with default strength (10 rounds). */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();

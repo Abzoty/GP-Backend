@@ -4,16 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-/**
- * Request body for US-014 — Create a question post in a space.
- *
- * <p>Validation rules from the acceptance criteria:
- * <ul>
- *   <li>Title: 3–300 characters</li>
- *   <li>Body: minimum 3 characters</li>
- *   <li>Tags: max 5, each tag max 30 characters</li>
- * </ul>
- */
+
 @Data
 public class CreatePostRequest {
 

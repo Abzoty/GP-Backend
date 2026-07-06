@@ -25,7 +25,6 @@ public class MaterialResponse {
     private String title;
     private String description;
 
-    // from enum ResourceType
     private String resourceType;
     
     private String url;

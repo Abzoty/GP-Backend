@@ -22,12 +22,6 @@ import java.util.UUID;
 public class FileStorageService {
 
     // ─── Global size limit ────────────────────────────────────────────────────
-
-    /**
-     * Maximum allowed upload size in bytes.
-     * Change this one constant to raise or lower the limit everywhere.
-     * Keep `spring.servlet.multipart.max-file-size` ≥ this value.
-     */
     public static final long MAX_FILE_SIZE_BYTES = 10L * 1024 * 1024; // 10 MB
 
     // ─── Configuration ────────────────────────────────────────────────────────
@@ -85,7 +79,6 @@ public class FileStorageService {
 
     public Resource loadAsResource(String filename) {
         try {
-            // normalize() prevents path-traversal attacks (e.g. "../../etc/passwd")
             Path filePath = uploadDir.resolve(filename).normalize();
             Resource resource = new UrlResource(filePath.toUri());
             if (!resource.exists() || !resource.isReadable()) {
@@ -113,7 +106,6 @@ public class FileStorageService {
                 log.warn("File '{}' was not found on disk during deletion — skipping", filename);
             }
         } catch (IOException e) {
-            // Log but do not rethrow — the DB record still needs to be removed
             log.warn("Could not delete file '{}': {}", filename, e.getMessage());
         }
     }

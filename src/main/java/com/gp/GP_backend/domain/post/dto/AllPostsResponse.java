@@ -9,14 +9,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * DTO returned for each post in the paginated feed (US-013).
- *
- * Acceptance criteria: each card shows title, author, vote count,
- * answer count, and tags. Sorted by newest (default) or top votes.
- * The full body is intentionally omitted — it belongs in PostDetailResponse.
- */
-// AllPostsResponse.java
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -51,7 +44,7 @@ public class AllPostsResponse {
     @AllArgsConstructor
     public static class AnswerSummary {
         private UUID    answerId;
-        private UUID    authorId;   // was Long — matches Answer.authorId which is UUID
+        private UUID    authorId; 
         private String  authorName;
         private String  authorAvatarUrl;
         private String  body;

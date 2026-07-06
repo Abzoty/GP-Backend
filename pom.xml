@@ -68,7 +68,7 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- ─── Dev Tools (hot reload, disabled in prod) ──────────── -->
+        <!-- ─── Dev Tools  ────────────────────────────────────────── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
@@ -76,7 +76,7 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- ─── Lombok (boilerplate reduction) ────────────────────── -->
+        <!-- ─── Lombok ─────────────────────────────────────────────── -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -124,13 +124,11 @@
 
         <!-- ─── Testing ───────────────────────────────────────────── -->
         <dependency>
-            <!-- Includes JUnit 5, Mockito, AssertJ, Spring Test -->
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <!-- Security-specific test utilities (@WithMockUser, etc.) -->
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
@@ -141,7 +139,7 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Resilience4j Spring support -->
+        <!-- Resilience4j Spring support ───────────────────────────── -->
         <dependency>
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-spring-boot3</artifactId>
@@ -164,7 +162,6 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <!-- Register Lombok as an annotation processor -->
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -177,7 +174,6 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <!-- Exclude Lombok from the final JAR (compile-only) -->
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>

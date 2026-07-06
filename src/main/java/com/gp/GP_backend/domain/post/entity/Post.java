@@ -10,19 +10,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Represents a question or discussion post inside a Space.
- *
- * <p>
- * {@code space} and {@code author} are real JPA {@code @ManyToOne}
- * associations (rather than bare UUID columns) so the FK relationships to
- * {@code spaces} and {@code users} actually show up in the generated
- * schema/ERD and Hibernate can enforce referential integrity.
- *
- * <p>
- * Tags are stored as a comma-separated string in a single column
- * (max 5 tags enforced at the service layer).
- */
 @Entity
 @Table(name = "posts", indexes = {
                 @Index(name = "idx_posts_space_created", columnList = "space_id, created_at"),

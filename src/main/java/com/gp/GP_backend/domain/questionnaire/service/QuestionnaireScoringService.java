@@ -13,9 +13,6 @@ import java.math.RoundingMode;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * Scores and validates questionnaire responses.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -47,8 +44,7 @@ public class QuestionnaireScoringService {
                     "INCOMPLETE_QUESTIONNAIRE");
         }
 
-        // 2. Initialize raw scores dynamically for all 5 departments defined in
-        // metadata
+        // 2. Initialize raw scores for all 5 departments defined in metadata
         Map<String, Integer> rawScores = new LinkedHashMap<>();
         if (questionnaire.metadata.departments != null) {
             for (String dept : questionnaire.metadata.departments) {
@@ -76,8 +72,7 @@ public class QuestionnaireScoringService {
                     .orElse(null);
 
             // Fallback: Map letter choices ("a", "b", "c"...) to array indices
-            // This handles cases like sending {2: "c"} for a Likert question with IDs
-            // 1,2,3,4,5
+            // handles cases like sending {2: "c"} for a Likert question with IDs 1,2,3,4,5
             if (answer == null) {
                 int index = -1;
                 switch (providedAnswerId.toLowerCase()) {
@@ -130,9 +125,6 @@ public class QuestionnaireScoringService {
         return response;
     }
 
-    /**
-     * Normalizes department scores so they sum to 1.0 (probabilities).
-     */
     private Map<String, BigDecimal> normalizeScores(Map<String, Integer> rawScores) {
         int total = rawScores.values().stream().mapToInt(Integer::intValue).sum();
         Map<String, BigDecimal> normalized = new LinkedHashMap<>();

@@ -12,9 +12,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-/**
- * REST controller for questionnaire endpoints.
- */
 @RestController
 @RequestMapping("/api/v1/questionnaire")
 @RequiredArgsConstructor
@@ -24,24 +21,12 @@ public class QuestionnaireController {
     private final QuestionnaireService questionnaireService;
     private final QuestionnaireScoringService qScoringService;
 
-    /**
-     * Retrieve the raw questionnaire JSON file as is.
-     *
-     * @return 200 OK with the exact contents of questionnaire.json
-     */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> getQuestionnaire() {
         // Returns the raw String directly, bypassing Jackson serialization
         return ResponseEntity.ok(questionnaireService.getRawQuestionnaire());
     }
 
-    /**
-     * Score questionnaire answers.
-     *
-     * @param request answers map (question ID -> answer choice e.g., {1: "a", 2:
-     *                "c"})
-     * @return 200 OK with raw and normalized scores (probabilities)
-     */
     @PostMapping("/score")
     public ResponseEntity<ApiResponse<QuestionnaireScoreResponse>> scoreQuestionnaire(
             @Valid @RequestBody QuestionnaireAnswersRequest request) {

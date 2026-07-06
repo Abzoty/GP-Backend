@@ -45,22 +45,12 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/**
- * Business logic for Posts and Answers.
- *
- * <p>
- * Covers US-014 (create question post) and US-015 (answer a question).
- * XP awards are delegated to {@link GamificationService} and notification
- * hooks are delegated to
- * {@link com.gp.GP_backend.domain.notification.service.NotificationService}
- * — both run in the same transaction so everything is atomic.
- */
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class PostService {
 
-        /** Valid sort fields for post search. */
         private static final Set<String> POST_SORT_FIELDS = Set.of("goodQuestionCount", "createdAt");
 
         // ─── Dependencies ─────────────────────────────────────────────────────────
@@ -74,7 +64,7 @@ public class PostService {
         private final GamificationService gamificationService;
         private final NotificationService notificationService;
 
-        // ─── US-014: Create a question post ───────────────────────────────────────
+        // ─── Create a question post ───────────────────────────────────────
 
         @Transactional
         public PostResponse createPost(UUID spaceId, User author, CreatePostRequest request) {
@@ -162,7 +152,7 @@ public class PostService {
                 return true;
         }
 
-        // ─── US-015: Answer a question ────────────────────────────────────────────
+        // ─── Answer a question ────────────────────────────────────────────
 
         @Transactional
         public AnswerResponse createAnswer(UUID postId, User author, CreateAnswerRequest request) {

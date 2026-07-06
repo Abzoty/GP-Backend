@@ -7,13 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.util.UUID;
 
-/**
- * Minimal confirmation returned after a successful registration.
- *
- * <p>
- * Intentionally lightweight — the client should call the login endpoint
- * to obtain tokens and the full user profile.
- */
+
 @Data
 @Builder
 @NoArgsConstructor

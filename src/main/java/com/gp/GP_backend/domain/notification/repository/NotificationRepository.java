@@ -10,9 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.UUID;
 
-/**
- * Repository for {@link Notification} entities.
- */
+
 public interface NotificationRepository extends JpaRepository<Notification, UUID> {
 
     /** All notifications for a user, newest first, paginated. */
@@ -38,5 +36,7 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
      */
     @Modifying
     @Query("UPDATE Notification n SET n.isRead = true WHERE n.id = :notificationId AND n.recipient.id = :userId")
-    int markNotificationAsReadForUserAndNotificationId(@Param("userId") UUID userId, @Param("notificationId") UUID notificationId);
+    int markNotificationAsReadForUserAndNotificationId(@Param("userId") UUID userId,
+            @Param("notificationId") UUID notificationId);
+    
 }

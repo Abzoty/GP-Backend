@@ -6,15 +6,6 @@ import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Read model returned to the client for a single post.
- *
- * <p>{@code answerCount} is populated from a COUNT query in the service
- * rather than a JPA collection, avoiding the N+1 trap on feed pages.
- *
- * <p>{@code authorName} is resolved by the service from {@code UserService}
- * so the client never needs a second request.
- */
 @Data
 @Builder
 public class PostResponse {

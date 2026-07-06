@@ -28,9 +28,6 @@ import com.gp.GP_backend.shared.util.XpCalculator;
 
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Handles upvoting of answers and "good question" votes on posts.
- */
 @Service
 @RequiredArgsConstructor
 public class VoteService {

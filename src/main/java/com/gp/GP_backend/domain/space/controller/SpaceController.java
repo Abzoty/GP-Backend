@@ -31,35 +31,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Tag(name = "Spaces", description = "Space management, membership, and discovery")
 @SecurityRequirement(name = "bearerAuth")
-@Validated // Enables Bean Validation on @RequestParam (e.g., @Min/@Max). Without this, invalid page/size may throw 500 from PageRequest.
+@Validated
 public class SpaceController {
 
     private final SpaceService spaceService;
 
     // ─── Create ───────────────────────────────────────────────────────────────
-
-    /**
-     * Creates a new space.
-     *
-     * <p>
-     * When {@code force=0} (the default), a similarity/duplicate check is performed
-     * before creation. If conflicts are found, the endpoint returns {@code 409}
-     * with
-     * the list of similar spaces in the response body — the client can then
-     * re-submit
-     * with {@code force=1} to bypass the check.
-     *
-     * <p>
-     * On success, the creating user is automatically enrolled as an {@code ADMIN}
-     * member.
-     *
-     * @param request     the space creation payload.
-     * @param force       {@code 0} = check for conflicts first; {@code 1} = create
-     *                    immediately.
-     * @param currentUser the authenticated creator.
-     * @return {@code 201 CREATED} with the new space, or {@code 409 CONFLICT} with
-     *         similar spaces.
-     */
     @PostMapping
     public ResponseEntity<ApiResponse<?>> createSpace(
             @Valid @RequestBody CreateSpaceRequest request,
@@ -128,20 +105,6 @@ public class SpaceController {
 
     // ─── Search ───────────────────────────────────────────────────────────────
 
-    /**
-     * Searches all active spaces with optional text, category filter, and sort.
-     *
-     * <p>
-     * All parameters are optional. Omitting them returns all active spaces
-     * sorted by {@code createdAt} descending.
-     *
-     * @param query    substring matched against name and description.
-     * @param category filter by {@link SpaceCategory} enum value.
-     * @param sortBy   {@code "memberCount"} or {@code "createdAt"} (default).
-     * @param sortDir  {@code "asc"} or {@code "desc"} (default).
-     * @param page     zero-based page index (default 0).
-     * @param size     page size (default 20).
-     */
     @GetMapping("/search")
     @Operation(summary = "Search active spaces by name/description with optional category filter and sort")
     public ResponseEntity<ApiResponse<List<SpaceResponse>>> searchSpaces(
@@ -158,13 +121,6 @@ public class SpaceController {
 
     // ─── Join ─────────────────────────────────────────────────────────────────
 
-    /**
-     * Joins the authenticated user to a space as a {@code MEMBER}.
-     *
-     * @param spaceId     the UUID of the target space.
-     * @param currentUser the authenticated user.
-     * @return {@code 200 OK} with the created membership record.
-     */
     @PostMapping("/{spaceId}/join")
     @Operation(summary = "Join a space as a member")
     public ResponseEntity<ApiResponse<MembershipResponse>> joinSpace(
@@ -182,19 +138,6 @@ public class SpaceController {
 
     // ─── Leave ────────────────────────────────────────────────────────────────
 
-    /**
-     * Removes the authenticated user from a space.
-     *
-     * <p>
-     * If the user is the <em>sole</em> admin of the space, the request is rejected
-     * with {@code 400 BAD REQUEST}. The user must first use the
-     * {@code POST /spaces/{spaceId}/admins/{memberId}} endpoint to grant the admin
-     * role to another member.
-     *
-     * @param spaceId     the UUID of the space to leave.
-     * @param currentUser the authenticated user.
-     * @return {@code 200 OK} on success.
-     */
     @DeleteMapping("/{spaceId}/leave")
     @Operation(summary = "Leave a space. If the user is the sole admin, they must grant admin to another member before leaving.")
     public ResponseEntity<ApiResponse<Void>> leaveSpace(
@@ -207,18 +150,6 @@ public class SpaceController {
 
     // ─── Edit ─────────────────────────────────────────────────────────────────
 
-    /**
-     * Partially updates the editable fields of a space.
-     *
-     * <p>
-     * Requires the {@code ADMIN} role within the target space.
-     * Null fields in the request body are ignored (PATCH semantics).
-     *
-     * @param spaceId     the UUID of the space to update.
-     * @param request     the partial update payload.
-     * @param currentUser the authenticated user performing the update.
-     * @return {@code 200 OK} with the updated space, or {@code 403 FORBIDDEN}.
-     */
     @PatchMapping("/{spaceId}")
     @Operation(summary = "Partially update a space's editable fields (ADMIN only)")
     public ResponseEntity<ApiResponse<SpaceResponse>> updateSpace(
@@ -232,19 +163,6 @@ public class SpaceController {
 
     // ─── Grant Admin ──────────────────────────────────────────────────────────
 
-    /**
-     * Grants the {@code ADMIN} role to an existing space member.
-     *
-     * <p>
-     * Only a current {@code ADMIN} of the space may call this endpoint.
-     * This is a <em>grant</em> (not a transfer): the requester keeps their own
-     * admin role. To step down after granting, call the leave endpoint.
-     *
-     * @param spaceId     the UUID of the space.
-     * @param memberId    the UUID of the member to promote.
-     * @param currentUser the authenticated admin performing the grant.
-     * @return {@code 200 OK} with the updated membership record.
-     */
     @PostMapping("/{spaceId}/admins/{memberId}")
     @Operation(summary = "Grant ADMIN role to an existing member of the space")
     public ResponseEntity<ApiResponse<MembershipResponse>> grantAdmin(

@@ -10,18 +10,6 @@ import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * Configures the OpenAPI (Swagger) documentation available at:
- * <ul>
- * <li>Swagger UI: {@code /swagger-ui/index.html}</li>
- * <li>OpenAPI spec: {@code /v3/api-docs}</li>
- * </ul>
- *
- * <p>
- * The Bearer token scheme is applied globally so that the "Authorize" button
- * in Swagger UI pre-fills the {@code Authorization: Bearer <token>} header
- * for every request. Copy a token from the login response and paste it there.
- */
 @Configuration
 public class OpenApiConfig {
 
@@ -47,10 +35,6 @@ public class OpenApiConfig {
                                                 .contact(new Contact().name("Covalent Team")));
         }
 
-        /**
-         * Groups all API endpoints under one group for the Swagger UI dropdown.
-         * Add more groups here if you want to separate public vs. private APIs.
-         */
         @Bean
         public GroupedOpenApi publicApi() {
                 return GroupedOpenApi.builder()

@@ -1,19 +1,5 @@
 package com.gp.GP_backend.shared.util;
 
-/**
- * Centralised XP constants, event-type strings, and level-calculation logic
- * for the gamification system.
- *
- * <p>
- * All XP award amounts and event identifiers are defined here so that
- * tuning a reward or a reference-type string only requires a change in one
- * place. Services import these constants rather than hard-coding magic
- * numbers or raw strings.
- *
- * <p>
- * Level thresholds follow a quadratic progression: each level requires
- * progressively more XP than the last, encouraging long-term engagement.
- */
 public final class XpCalculator {
 
     // ─── XP awards per action ─────────────────────────────────────────────────
@@ -76,28 +62,10 @@ public final class XpCalculator {
     /** Consecutive-day counts at which a streak bonus is awarded. */
     public static final int[] STREAK_MILESTONES = { 7, 15, 30, 100 };
 
-    // Utility class — no instantiation
     private XpCalculator() {
     }
 
     // ─── Level calculation ────────────────────────────────────────────────────
-
-    /**
-     * Calculates the level for a given total XP amount.
-     *
-     * <p>
-     * Formula: {@code level = floor(1 + sqrt(xp / 100))}
-     * This gives:
-     * <ul>
-     * <li>Level 1: 0 – 99 XP</li>
-     * <li>Level 2: 100 – 399 XP</li>
-     * <li>Level 3: 400 – 899 XP</li>
-     * <li>Level 5: 1 600+ XP</li>
-     * </ul>
-     *
-     * @param totalXp the user's cumulative XP (must be ≥ 0).
-     * @return level as a short (minimum 1).
-     */
     public static short calculateLevel(int totalXp) {
         if (totalXp <= 0)
             return 1;
@@ -105,26 +73,12 @@ public final class XpCalculator {
         return (short) Math.max(1, level);
     }
 
-    /**
-     * Returns the XP threshold at which a user reaches the given level.
-     *
-     * <p>
-     * Inverse of {@link #calculateLevel}: {@code xp = 100 * (level - 1)^2}
-     *
-     * @param level target level (must be ≥ 1).
-     * @return minimum XP required to reach that level.
-     */
     public static int xpForLevel(int level) {
         if (level <= 1)
             return 0;
         return 100 * (level - 1) * (level - 1);
     }
 
-    /**
-     * Returns {@code true} if the given streak length is a defined milestone.
-     *
-     * @param streakDays current consecutive-login streak.
-     */
     public static boolean isStreakMilestone(int streakDays) {
         for (int milestone : STREAK_MILESTONES) {
             if (streakDays == milestone)

@@ -12,9 +12,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-/**
- * Manages questionnaire data.
- */
+
 @Service
 @Slf4j
 public class QuestionnaireService {
@@ -23,7 +21,7 @@ public class QuestionnaireService {
     private final ResourceLoader resourceLoader;
 
     private QuestionnaireData questionnaire;
-    private String rawQuestionnaireJson; // Changed from JsonNode to String
+    private String rawQuestionnaireJson; 
 
     public QuestionnaireService(ObjectMapper objectMapper, ResourceLoader resourceLoader) {
         this.objectMapper = objectMapper;
@@ -50,16 +48,10 @@ public class QuestionnaireService {
         }
     }
 
-    /**
-     * Returns the raw JSON content of the questionnaire as a String.
-     */
     public String getRawQuestionnaire() {
         return rawQuestionnaireJson;
     }
 
-    /**
-     * Returns the mapped questionnaire data (for internal scoring use).
-     */
     public QuestionnaireData getFullQuestionnaire() {
         return questionnaire;
     }
@@ -77,7 +69,7 @@ public class QuestionnaireService {
         public String version;
         public String title;
         public String instructions;
-        public List<String> departments; // Captures the 5 departments from JSON
+        public List<String> departments;
 
         @JsonProperty("total_questions")
         public Integer totalQuestions;

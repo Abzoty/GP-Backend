@@ -26,22 +26,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * REST controller for Posts and Answers.
- *
- * <p>
- * Base paths:
- * <ul>
- * <li>{@code POST /api/v1/spaces/{spaceId}/posts} — US-014: create a post</li>
- * <li>{@code GET  /api/v1/posts/{postId}} — fetch a single post</li>
- * <li>{@code POST /api/v1/posts/{postId}/answers} — US-015: answer a post</li>
- * </ul>
- *
- * <p>
- * The authenticated user is injected via {@code @AuthenticationPrincipal}
- * — Spring Security resolves it from the JWT set by {@code JwtAuthFilter}.
- * Since {@code User} implements {@code UserDetails}, no extra lookup is needed.
- */
+
 @RestController
 @RequiredArgsConstructor
 @Tag(name = "Posts & Answers", description = "Create and retrieve posts and answers within spaces")
@@ -54,17 +39,6 @@ public class PostController {
 
     // ─── US-014: Create a post ────────────────────────────────────────────────
 
-    /**
-     * Creates a question or discussion post inside a space.
-     *
-     * <p>
-     * The caller must be an authenticated member of the target space.
-     * Returns 201 Created with the saved post on success.
-     *
-     * @param spaceId path variable — the space to post in
-     * @param request validated JSON body
-     * @param author  resolved from JWT — the currently authenticated user
-     */
     @PostMapping("/api/v1/spaces/{spaceId}/posts")
     @Operation(summary = "Create a post in a space (US-014)")
     public ResponseEntity<ApiResponse<PostResponse>> createPost(
@@ -199,11 +173,6 @@ public class PostController {
 
     // ─── Get a single post ────────────────────────────────────────────────────
 
-    /**
-     * Fetches a post by ID and increments its view counter.
-     * Any authenticated user can view a post (no membership check here —
-     * feed visibility is enforced at the space level).
-     */
     @GetMapping("/api/v1/posts/{postId}")
     @Operation(summary = "Get a post by ID")
     public ResponseEntity<ApiResponse<PostResponse>> getPost(
@@ -238,22 +207,6 @@ public class PostController {
 
     // ─── Search ───────────────────────────────────────────────────────────────
 
-    /**
-     * Searches posts within a space by title or body, with optional solved filter
-     * and configurable sort.
-     *
-     * <p>
-     * Caller must be a member of the space.
-     *
-     * @param spaceId  the space to search within.
-     * @param query    substring matched against title and body.
-     * @param isSolved {@code true} = only solved, {@code false} = only unsolved,
-     *                 omit = all posts.
-     * @param sortBy   {@code "goodQuestionCount"} or {@code "createdAt"} (default).
-     * @param sortDir  {@code "asc"} or {@code "desc"} (default).
-     * @param page     zero-based page index (default 0).
-     * @param size     page size (default 20).
-     */
     @GetMapping("/api/v1/posts/search/{spaceId}")
     @Operation(summary = "Search posts in a space by title/body with optional solved filter and sort")
     public ResponseEntity<ApiResponse<List<AllPostsResponse>>> searchPosts(
@@ -273,17 +226,6 @@ public class PostController {
 
     // ─── US-015: Answer a post ────────────────────────────────────────────────
 
-    /**
-     * Submits an answer to an existing question post.
-     *
-     * <p>
-     * The caller must be an authenticated member of the space that owns
-     * the post. Returns 201 Created with the saved answer on success.
-     *
-     * @param postId  path variable — the post being answered
-     * @param request validated JSON body
-     * @param author  resolved from JWT — the currently authenticated user
-     */
     @PostMapping("/api/v1/posts/{postId}/answers")
     @Operation(summary = "Answer a question post (US-015)")
     public ResponseEntity<ApiResponse<AnswerResponse>> createAnswer(

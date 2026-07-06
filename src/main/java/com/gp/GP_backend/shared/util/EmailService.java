@@ -7,18 +7,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-/**
- * Sends transactional emails using Spring's {@link JavaMailSender}.
- *
- * <p>
- * All methods are {@code @Async} so they run on a background thread pool and
- * never block the HTTP request. Failures are logged but never propagated to
- * the caller — email delivery is best-effort.
- *
- * <p>
- * SMTP credentials are configured in {@code application-dev.properties}.
- * In production, load them from environment variables or a secrets manager.
- */
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -26,12 +15,6 @@ public class EmailService {
 
     private final JavaMailSender mailSender;
 
-    /**
-     * Sends a welcome email to a newly registered user.
-     *
-     * @param toEmail  the recipient's email address.
-     * @param fullName the recipient's display name, used for personalisation.
-     */
     @Async
     public void sendWelcomeEmail(String toEmail, String fullName) {
         try {
@@ -59,17 +42,6 @@ public class EmailService {
         mailSender.send(message);
     }
 
-    /**
-     * Sends a password-reset link to the user's email address.
-     *
-     * <p>
-     * The {@code resetLink} contains the raw token as a query parameter.
-     * The token is valid for 15 minutes and is single-use.
-     *
-     * @param toEmail   the recipient's email address.
-     * @param fullName  the recipient's display name.
-     * @param resetLink the full URL the user should visit to set a new password.
-     */
     @Async
     public void sendPasswordResetEmail(String toEmail, String fullName, String resetLink) {
         try {

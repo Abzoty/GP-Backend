@@ -3,15 +3,7 @@ package com.gp.GP_backend.domain.user.dto;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 
-/**
- * Payload for the {@code POST /api/v1/auth/register} endpoint.
- *
- * <p>
- * Bean Validation annotations enforce constraints before the request
- * reaches the service layer. All validation errors are collected and
- * returned together by
- * {@link com.gp.GP_backend.shared.exception.GlobalExceptionHandler}.
- */
+
 @Data
 public class RegisterRequest {
 
@@ -33,16 +25,13 @@ public class RegisterRequest {
         regexp = "^\\d{8}$",
         message = "Student ID must be exactly 8 digits"
     )
-    /** Optional — not required for registration but must be unique if provided. */
     private String studentId;
 
-    /** 1 = First year … 5 = Fifth year. */
     @Min(1)
-    @Max(5)
+    @Max(4)
     private Integer academicYear;
 
-    /** 1 = First semester … 10 = Tenth semester (across all academic years). */
     @Min(1)
-    @Max(10)
+    @Max(2)
     private Integer currentSemester;
 }

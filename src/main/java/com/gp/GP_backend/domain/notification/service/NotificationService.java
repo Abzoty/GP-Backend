@@ -33,12 +33,7 @@ import com.gp.GP_backend.domain.space.repository.SpaceRepository;
 import com.gp.GP_backend.domain.user.entity.User;
 import com.gp.GP_backend.domain.user.repository.UserRepository;
 
-/**
- * Creates and manages in-app notifications.
- *
- * This service should be called by PostService, VoteService, etc. after the
- * primary action completes. It runs within the same transaction by default.
- */
+
 @Service
 @RequiredArgsConstructor
 public class NotificationService {

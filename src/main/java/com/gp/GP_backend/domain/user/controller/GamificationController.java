@@ -23,14 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Endpoints for gamification: the authenticated user's own profile,
- * the system-wide leaderboard, and per-space leaderboards.
- *
- * <p>
- * All routes require a valid JWT (enforced by
- * {@link com.gp.GP_backend.config.SecurityConfig}).
- */
+
 @RestController
 @RequestMapping("/api/v1/gamification")
 @RequiredArgsConstructor
@@ -40,10 +33,6 @@ public class GamificationController {
 
     private final GamificationService gamificationService;
 
-    /**
-     * Returns the full gamification profile (XP, level, streaks, counters)
-     * for the currently authenticated user.
-     */
     @GetMapping("/me")
     @Operation(summary = "Get the authenticated user's gamification profile")
     public ResponseEntity<ApiResponse<GamificationProfileResponse>> getMyProfile(
@@ -54,11 +43,7 @@ public class GamificationController {
         return ResponseEntity.ok(ApiResponse.ok("Gamification profile retrieved", profile));
     }
 
-    /**
-     * Returns the top {@code limit} users platform-wide, ranked by overall XP.
-     *
-     * @param limit maximum entries to return (default 20, max 100).
-     */
+
     @GetMapping("/leaderboard")
     @Operation(summary = "Get the system-wide XP leaderboard")
     public ResponseEntity<ApiResponse<List<SystemLeaderboardEntry>>> getSystemLeaderboard(
@@ -69,16 +54,7 @@ public class GamificationController {
         return ResponseEntity.ok(ApiResponse.ok("System leaderboard retrieved", leaderboard));
     }
 
-    /**
-     * Returns all members of the given space ranked by their overall XP,
-     * with space-scoped activity counters (posts, answers, materials).
-     *
-     * <p>
-     * The requesting user must be a member of the space.
-     *
-     * @param spaceId the target space's UUID.
-     * @param limit   maximum entries to return (default 20, max 100).
-     */
+
     @GetMapping("/leaderboard/spaces/{spaceId}")
     @Operation(summary = "Get the leaderboard for a specific space")
     public ResponseEntity<ApiResponse<List<SpaceLeaderboardEntry>>> getSpaceLeaderboard(

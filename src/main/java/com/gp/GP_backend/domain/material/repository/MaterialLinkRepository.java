@@ -27,7 +27,7 @@ public interface MaterialLinkRepository extends JpaRepository<MaterialLink, UUID
         List<MaterialLink> findByUserIdAndSpaceId(
                         @Param("userId") UUID userId,
                         @Param("spaceId") UUID spaceId);
-                //  ADD — paginated version of the same query
+                //  paginated version of the same query
                 @Query("""
                                 SELECT ml FROM MaterialLink ml
                                 WHERE ml.user.id = :userId

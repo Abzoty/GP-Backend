@@ -7,11 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-/**
- * Response DTO for displaying questionnaire (without scores).
- *
- * @since 1.0
- */
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

@@ -15,6 +15,9 @@ public class JwtAccessDeniedHandler implements AccessDeniedHandler {
 
     private final HandlerExceptionResolver resolver;
 
+    // creates a custom ApiException with HTTP 403 FORBIDDEN and passes it to
+    // Spring’s exception resolver.
+
     public JwtAccessDeniedHandler(@Qualifier("handlerExceptionResolver") HandlerExceptionResolver resolver) {
         this.resolver = resolver;
     }

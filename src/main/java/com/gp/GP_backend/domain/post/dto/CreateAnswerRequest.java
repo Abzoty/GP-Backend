@@ -4,9 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-/**
- * Request body for US-015 — Answer a question in a space.
- */
 @Data
 public class CreateAnswerRequest {
 

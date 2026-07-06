@@ -37,29 +37,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-/**
- * Manages XP awards, level-ups, streak tracking, profile retrieval,
- * and leaderboard generation for the gamification system.
- *
- * <p>
- * All write methods are {@code @Transactional} and participate in the
- * calling service's transaction (propagation = REQUIRED by default), so XP
- * changes are always atomic with the action that triggered them.
- *
- * <p>
- * <b>Design notes:</b>
- * <ul>
- * <li>Award methods accept a {@code UUID userId} rather than a {@code User}
- * entity to avoid detached-entity issues when called from non-transactional
- * callers (e.g. AuthController login). The user FK in
- * {@link XpTransaction} is set via
- * {@link UserRepository#getReferenceById}, which yields a Hibernate
- * proxy without issuing an extra SELECT.</li>
- * <li>The {@link GamificationProfile} is created lazily on first XP award if
- * it does not already exist, providing a safe fallback for users that
- * pre-date the feature.</li>
- * </ul>
- */
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -73,24 +51,12 @@ public class GamificationService {
         private final PostRepository postRepository;
         private final AnswerRepository answerRepository;
         private final MaterialRepository materialRepository;
-        // Injected separately — EntityManager is transaction-scoped,
-        // not a singleton bean. @PersistenceContext provides a thread-safe
-        // proxy that routes to the correct instance per transaction.
+
         @PersistenceContext
         private EntityManager entityManager;
 
         // ─── Profile bootstrap ────────────────────────────────────────────────────
 
-        /**
-         * Creates a blank {@link GamificationProfile} for a user.
-         *
-         * <p>
-         * Note: profiles are normally created lazily on first gamification interaction.
-         * This method is kept as an optional bootstrap utility (e.g., migrations or
-         * future eager-creation at registration).
-         *
-         * @param user the freshly persisted user entity.
-         */
         @Transactional
         public void createProfileForUser(User user) {
                 GamificationProfile profile = GamificationProfile.builder()
@@ -102,39 +68,12 @@ public class GamificationService {
 
         // ─── XP awards ────────────────────────────────────────────────────────────
 
-        /**
-         * Awards XP to a user for a given action with no associated entity reference.
-         *
-         * @param userId    the recipient's UUID.
-         * @param eventType one of the {@code XpCalculator.EVENT_*} constants.
-         * @param xpDelta   positive integer; XP to add.
-         */
         @Transactional
         public void awardXp(UUID userId, String eventType, int xpDelta) {
                 awardXp(userId, eventType, xpDelta, null, null);
         }
 
-        /**
-         * Awards XP to a user for a given action, recording a polymorphic reference
-         * to the triggering entity (post, answer, material, …).
-         *
-         * <p>
-         * Steps:
-         * <ol>
-         * <li>Load (or lazily create) the user's {@link GamificationProfile}.</li>
-         * <li>Increment {@code xpPoints} and recalculate {@code level}.</li>
-         * <li>Increment the relevant denormalised counter on the profile.</li>
-         * <li>Persist an immutable {@link XpTransaction} audit record.</li>
-         * </ol>
-         *
-         * @param userId        the recipient's UUID.
-         * @param eventType     one of the {@code XpCalculator.EVENT_*} constants.
-         * @param xpDelta       positive integer; XP to add.
-         * @param referenceId   UUID of the entity that triggered this event
-         *                      (nullable).
-         * @param referenceType one of the {@code XpCalculator.REF_*} constants
-         *                      (nullable).
-         */
+
         @Transactional
         public void awardXp(UUID userId,
                         String eventType,
@@ -149,8 +88,6 @@ public class GamificationService {
 
                 String eventKey = buildEventKey(userId, eventType, referenceType, referenceId, null);
 
-                // Idempotency guard: insert the transaction first. If it's a duplicate,
-                // skip the award entirely.
                 if (!tryAppendTransaction(userId, eventType, eventKey, xpDelta, referenceId, referenceType)) {
                         return;
                 }
@@ -190,7 +127,7 @@ public class GamificationService {
                 Optional<XpTransaction> txOpt = xpTransactionRepository.findByEventKey(eventKey);
 
                 if (txOpt.isEmpty()) {
-                        return; // already revoked or never existed → idempotent
+                        return;
                 }
 
                 XpTransaction tx = txOpt.get();
@@ -219,25 +156,14 @@ public class GamificationService {
 
                 gamificationProfileRepository.save(profile);
 
-                // 🔥 remove transaction (so it can be awarded again later if needed)
                 xpTransactionRepository.delete(tx);
 
                 log.debug("Revoked {} XP ({}) from user {}", xpDelta, eventType, userId);
         }
+
+        
         // ─── Daily login + streak tracking ───────────────────────────────────────
 
-        /**
-         * Records a daily login event: awards {@link XpCalculator#XP_DAILY_LOGIN}
-         * XP once per calendar day, updates the consecutive-day streak, and grants
-         * a {@link XpCalculator#XP_STREAK_BONUS} on milestone days
-         * (7, 15, 30, 100).
-         *
-         * <p>
-         * Calling this method more than once on the same calendar day is a
-         * no-op — the guard on {@code lastActivityDate} prevents duplicate awards.
-         *
-         * @param userId the authenticated user's UUID.
-         */
         @Transactional
         public void trackDailyLogin(UUID userId) {
                 LocalDate today = LocalDate.now();
@@ -317,8 +243,6 @@ public class GamificationService {
                                 .orElseGet(() -> {
                                         User userRef = userRepository.getReferenceById(userId);
 
-                                        // Insert if missing, then take a pessimistic lock on the managed entity.
-                                        // If another request wins the insert race, fall back to the locked read path.
                                         GamificationProfile created = GamificationProfile.builder().user(userRef)
                                                         .build();
                                         try {
@@ -344,9 +268,6 @@ public class GamificationService {
                         UUID referenceId,
                         String referenceType) {
 
-                // Best-effort fast-path: avoids a known-duplicate insert.
-                // This is NOT a correctness guarantee under concurrency; the real guard is the
-                // DB unique constraint on xp_transactions.event_key + the catch below.
                 if (xpTransactionRepository.existsByEventKey(eventKey)) {
                         return false;
                 }
@@ -373,10 +294,6 @@ public class GamificationService {
                         UUID referenceId,
                         String extra) {
 
-                // '|' is a safe separator here: UUID.toString() and our constant tokens don't
-                // contain it.
-                // The key is used for uniqueness/idempotency (not parsing), so `extra` may
-                // contain '|'.
                 String refType = (referenceType == null || referenceType.isBlank()) ? "-" : referenceType;
                 String refId = (referenceId == null) ? "-" : referenceId.toString();
                 String suffix = (extra == null || extra.isBlank()) ? "" : ("|" + extra);
@@ -385,11 +302,6 @@ public class GamificationService {
 
         // ─── Profile retrieval ────────────────────────────────────────────────────
 
-        /**
-         * Returns the full gamification profile for the given user.
-         *
-         * @throws ApiException 404 if the user has no gamification profile.
-         */
         @Transactional(readOnly = true)
         public GamificationProfileResponse getProfile(UUID userId) {
                 GamificationProfile profile = gamificationProfileRepository.findByUserId(userId)
@@ -400,12 +312,6 @@ public class GamificationService {
 
         // ─── Leaderboards ─────────────────────────────────────────────────────────
 
-        /**
-         * Returns the top {@code limit} users platform-wide, ranked by overall XP
-         * (descending), with ties broken by level.
-         *
-         * @param limit maximum number of entries to return (capped at 100).
-         */
         @Transactional(readOnly = true)
         public List<SystemLeaderboardEntry> getSystemLeaderboard(int limit) {
                 int safeLimit = Math.max(1, Math.min(limit, 100));
@@ -427,19 +333,7 @@ public class GamificationService {
                                 .toList();
         }
 
-        /**
-         * Returns all members of {@code spaceId}, ranked by their <em>overall</em>
-         * XP (descending), with space-scoped activity counters.
-         *
-         * <p>
-         * Only authenticated members of the space may request this leaderboard.
-         *
-         * @param spaceId     the target space.
-         * @param requesterId the authenticated user making the request.
-         * @param limit       maximum number of entries (capped at 100).
-         * @throws ApiException 404 if the space does not exist.
-         * @throws ApiException 403 if the requester is not a member of the space.
-         */
+        
         @Transactional(readOnly = true)
         public List<SpaceLeaderboardEntry> getSpaceLeaderboard(UUID spaceId,
                         UUID requesterId,
@@ -490,7 +384,6 @@ public class GamificationService {
 
                 int safeLimit = Math.max(1, Math.min(limit, 100));
 
-                // CHANGE — the .map() now reads from the pre-built maps (no per-member queries)
                 List<SpaceLeaderboardEntry> entries = memberships.stream()
                                 .map(m -> {
                                         UUID uid = m.getUser().getId();
@@ -501,7 +394,6 @@ public class GamificationService {
                                                         .fullName(m.getUser().getFullName())
                                                         .xpPoints(profile != null ? profile.getXpPoints() : 0)
                                                         .level(profile != null ? profile.getLevel() : (short) 1)
-                                                        // reads from map — zero queries here
                                                         .postsInSpace(postCounts.getOrDefault(uid, 0L).intValue())
                                                         .answersInSpace(answerCounts.getOrDefault(uid, 0L).intValue())
                                                         .materialsSharedInSpace(
@@ -523,29 +415,6 @@ public class GamificationService {
 
         // ─── Private helpers ──────────────────────────────────────────────────────
 
-        /**
-         * Loads the gamification profile for a user, or lazily creates one if none
-         * exists (safe fallback for users that pre-date the gamification feature).
-         */
-        // private GamificationProfile getOrCreateProfile(UUID userId) {
-        // return gamificationProfileRepository.findByUserId(userId)
-        // .orElseGet(() -> {
-        // GamificationProfile fresh = GamificationProfile.builder()
-        // .user(userRepository.getReferenceById(userId))
-        // .build();
-        // try {
-        // GamificationProfile saved = gamificationProfileRepository.save(fresh);
-        // log.debug("Lazily created gamification profile for user {}", userId);
-        // return saved;
-        // } catch (DataIntegrityViolationException ex) {
-        // // Another transaction created it first.
-        // return gamificationProfileRepository.findByUserId(userId)
-        // .orElseThrow(() -> ex);
-        // }
-        // });
-        // }
-
-        /** Maps a {@link GamificationProfile} to its response DTO. */
         private GamificationProfileResponse toProfileResponse(GamificationProfile p) {
                 return GamificationProfileResponse.builder()
                                 .userId(p.getUser().getId())

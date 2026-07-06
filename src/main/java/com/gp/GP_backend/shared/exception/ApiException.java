@@ -3,22 +3,6 @@ package com.gp.GP_backend.shared.exception;
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
-/**
- * Application-level exception that carries an HTTP status code.
- *
- * <p>
- * Throw this instead of generic {@link RuntimeException} whenever you want
- * precise control over the HTTP response status. It is caught by
- * {@link GlobalExceptionHandler} and serialised into a standard
- * {@link com.gp.GP_backend.shared.response.ApiResponse}.
- *
- * <p>
- * Example:
- * 
- * <pre>{@code
- * throw new ApiException(HttpStatus.CONFLICT, "Email is already registered");
- * }</pre>
- */
 @Getter
 public class ApiException extends RuntimeException {
 

@@ -33,14 +33,8 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
                         @Param("targetType") TargetType targetType);
 
         /**
-         * Deletes all votes cast on any answer that belongs to the given post.
          * Used during post deletion to clean up answer-level votes before the
          * answers themselves are removed.
-         *
-         * NOTE: {@code targetId} on Vote stays a bare UUID — it's a polymorphic
-         * "generic FK" that can point at either a Post or an Answer depending on
-         * {@code targetType}, so it can't be modeled as a single typed
-         * association.
          */
         @Transactional
         @Modifying

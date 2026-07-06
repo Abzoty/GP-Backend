@@ -6,12 +6,6 @@ import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Read model returned to the client for a single answer.
- *
- * <p>{@code authorName} is resolved by the service so clients get the
- * display name without a second round-trip.
- */
 @Data
 @Builder
 public class AnswerResponse {

@@ -16,16 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-/**
- * Endpoints for the currently authenticated user's own account.
- *
- * <p>
- * All routes require a valid JWT (enforced by
- * {@link com.gp.GP_backend.config.SecurityConfig}).
- * The user is injected via {@code @AuthenticationPrincipal} after the
- * {@link com.gp.GP_backend.security.JwtAuthFilter} populates the
- * SecurityContext.
- */
+
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
@@ -36,22 +27,15 @@ public class UserController {
     private final PasswordResetService passwordResetService;
     private final ModelMapper modelMapper;
 
-    /** Returns the profile of the currently authenticated user. */
     @GetMapping("/profile")
     public ResponseEntity<ApiResponse<UserResponse>> viewProfile(
             @AuthenticationPrincipal User currentUser) {
 
-        // Entity is loaded by the JWT filter — no additional DB query needed.
-        // Note: this instance may be slightly stale if the user record changed after authentication.
-        // We accept that trade-off to avoid a DB hit on every /profile call.
         UserResponse profile = modelMapper.map(currentUser, UserResponse.class);
         return ResponseEntity.ok(ApiResponse.ok("Profile retrieved", profile));
     }
 
-    /**
-     * Applies partial updates to the current user's profile.
-     * Null fields in the request body are ignored (PATCH semantics).
-     */
+
     @PatchMapping("/profile")
     public ResponseEntity<ApiResponse<UserResponse>> updateProfile(
             @AuthenticationPrincipal User currentUser,
@@ -61,14 +45,7 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok("Profile updated", modelMapper.map(updated, UserResponse.class)));
     }
 
-    /**
-     * Changes the password for the authenticated user.
-     *
-     * <p>
-     * Requires the current password to prevent a stolen JWT from being used to
-     * lock the legitimate user out of their account. All refresh tokens are revoked
-     * on success, prompting re-login on every device.
-     */
+
     @PostMapping("/change-password")
     public ResponseEntity<ApiResponse<Void>> changePassword(
             @AuthenticationPrincipal User currentUser,
@@ -80,11 +57,7 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok("Password changed successfully. Please log in again.", null));
     }
 
-    /**
-     * Revokes the specific refresh token provided in the request body
-     * (single-device logout).
-     * The JWT access token remains valid until it expires naturally.
-     */
+
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(
             @AuthenticationPrincipal User currentUser,

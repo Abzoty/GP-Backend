@@ -4,33 +4,10 @@ import com.gp.GP_backend.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 
-// import java.lang.annotation.Target;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 
-/**
- * Records a single vote cast by a user on a post or answer.
- *
- * <p>
- * {@code targetType} + {@code targetId} form a polymorphic reference
- * (similar to a "generic foreign key"). Since posts and answers can both
- * receive
- * votes, and both now have UUID primary keys, {@code targetId} is stored as
- * {@code UNIQUEIDENTIFIER}.
- *
- * <p>
- * A unique constraint on {@code (user_id, target_type, target_id)} should be
- * enforced at the service layer to prevent duplicate votes by the same user.
- *
- * <p>
- * Vote types:
- * <ul>
- * <li>{@code UPVOTE} – cast on an answer; increments its upvote_count.</li>
- * <li>{@code GOOD_QUESTION} – cast on a post; increments its
- * good_question_count.</li>
- * </ul>
- */
 @Entity
 @Table(
     name = "votes",
